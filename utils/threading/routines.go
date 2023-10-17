@@ -1,10 +1,3 @@
-/**
- * Author: Wang P
- * Version: 1.0.0
- * Date: 2022/2/8 9:41 下午
- * Description:
- **/
-
 package threading
 
 import (
@@ -38,7 +31,8 @@ func GoroutineID() int64 {
 
 // Recover is used with defer to do cleanup on panics.
 // Use it like:
-//  defer Recover(func() {})
+//
+//	defer Recover(func() {})
 func Recover(cleanups ...func()) {
 	for _, cleanup := range cleanups {
 		cleanup()

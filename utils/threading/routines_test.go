@@ -1,10 +1,3 @@
-/**
- * Author: Wang P
- * Version: 1.0.0
- * Date: 2022/2/8 9:49 下午
- * Description:
- **/
-
 package threading
 
 import (
