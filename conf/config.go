@@ -13,14 +13,12 @@ const (
 	jsonTagSep = ','
 )
 
-var (
-	loaders = map[string]func([]byte, any) error{
-		".json": LoadFromJsonBytes,
-		".toml": LoadFromTomlBytes,
-		".yaml": LoadFromYamlBytes,
-		".yml":  LoadFromYamlBytes,
-	}
-)
+var loaders = map[string]func([]byte, any) error{
+	".json": LoadFromJsonBytes,
+	".toml": LoadFromTomlBytes,
+	".yaml": LoadFromYamlBytes,
+	".yml":  LoadFromYamlBytes,
+}
 
 // MustLoad loads config into v from path, exits on error.
 func MustLoad(path string, v any, opts ...Option) {

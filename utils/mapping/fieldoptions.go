@@ -5,8 +5,7 @@ import "fmt"
 const notSymbol = '!'
 
 type (
-	// use context and OptionalDep option to determine the value of Optional
-	// nothing to do with context.Context
+	// fieldOptionsWithContext use context and OptionalDep option to determine the value of Optional nothing to do with context.Context
 	fieldOptionsWithContext struct {
 		Inherit    bool
 		FromString bool
@@ -66,8 +65,7 @@ func (o *fieldOptions) optionalDep() string {
 	return o.OptionalDep
 }
 
-func (o *fieldOptions) toOptionsWithContext(key string, m Valuer, fullName string) (
-	*fieldOptionsWithContext, error) {
+func (o *fieldOptions) toOptionsWithContext(key string, m Valuer, fullName string) (*fieldOptionsWithContext, error) {
 	var optional bool
 	if o.optional() {
 		dep := o.optionalDep()
