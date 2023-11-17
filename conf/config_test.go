@@ -8,12 +8,7 @@ import (
 	"testing"
 )
 
-func TestConfigJson(t *testing.T) {
-	tests := []string{
-		".json",
-		".yaml",
-		".yml",
-	}
+func TestMustLoad(t *testing.T) {
 	text := `{
 	"a": "foo",
 	"b": 1,
@@ -21,11 +16,36 @@ func TestConfigJson(t *testing.T) {
 	"d": "abcd!@#$112"
 }`
 	t.Setenv("FOO", "2")
-
-	for _, test := range tests {
-		test := test
-		t.Run(test, func(t *testing.T) {
-			tmpfile, err := createTempFile(test, text)
+	type args struct {
+		path string
+		opts []Option
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: ".json",
+			args: args{
+				path: ".json",
+			},
+		},
+		{
+			name: ".yaml",
+			args: args{
+				path: ".yaml",
+			},
+		},
+		{
+			name: ".yml",
+			args: args{
+				path: ".yml",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpfile, err := createTempFile(tt.args.path, text)
 			assert.Nil(t, err)
 			defer os.Remove(tmpfile)
 
@@ -45,7 +65,7 @@ func TestConfigJson(t *testing.T) {
 }
 
 func createTempFile(ext, text string) (string, error) {
-	tmpFile, err := os.CreateTemp(os.TempDir(), Md5Hex([]byte(text))+"*"+ext)
+	tmpFile, err := os.CreateTemp(os.TempDir(), md5Hash([]byte(text))+"*"+ext)
 	if err != nil {
 		return "", err
 	}
@@ -62,12 +82,10 @@ func createTempFile(ext, text string) (string, error) {
 	return filename, nil
 }
 
-// Md5Hex returns the md5 hex string of data.
-func Md5Hex(data []byte) string {
+func md5Hash(data []byte) string {
 	return fmt.Sprintf("%x", Md5(data))
 }
 
-// Md5 returns the md5 bytes of data.
 func Md5(data []byte) []byte {
 	digest := md5.New()
 	digest.Write(data)
