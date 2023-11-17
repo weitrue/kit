@@ -3,10 +3,12 @@ module github.com/weitrue/kit
 go 1.21.2
 
 require (
+	github.com/pelletier/go-toml/v2 v2.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/shopspring/decimal v1.3.1
 	github.com/stretchr/testify v1.8.4
 	github.com/xuri/excelize/v2 v2.8.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
