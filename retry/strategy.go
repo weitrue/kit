@@ -1,16 +1,15 @@
 package retry
 
 import (
+	"github.com/weitrue/kit/utils/math"
 	"time"
-
-	"github.com/zeromicro/go-zero/core/mathx"
 )
 
 // 偏差阈值：使实际持续时间偏差在 [0.95, 1.05] 中
 const deviation = 0.05
 
 // unstable 不稳定器
-var unstable = mathx.NewUnstable(deviation)
+var unstable = math.NewUnstable(deviation)
 
 // Strategy 尝试策略函数，在每次尝试进行前调用
 type Strategy func(attempt uint) bool
