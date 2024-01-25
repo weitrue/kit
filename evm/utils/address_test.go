@@ -42,7 +42,7 @@ func TestName(t *testing.T) {
 	rlp.DecodeBytes(rawTxBytes, &tx)
 	fmt.Println(tx.Hash().Hex())
 
-	signer := types.NewCancunSigner(tx.ChainId())
+	signer := types.NewEIP155Signer(tx.ChainId())
 	sender, err := signer.Sender(tx)
 	assert.Nil(t, err)
 
