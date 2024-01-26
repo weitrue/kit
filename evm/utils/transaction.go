@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -25,7 +26,24 @@ func Withdraw(ctx context.Context, from, to string) error {
 		return err
 	}
 
-	tx, err := CreateTransaction(ctx, client, from, to, balanceAt)
+	gas := big.NewInt(2000000000) // 设置 tip（最小费用）
+	gasLimit := uint64(21000)
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		return err
+	}
+
+	if gas.Cmp(gasPrice) < 0 {
+		gas = gasPrice
+	}
+
+	lowest := new(big.Int).Mul(gas, big.NewInt(int64(gasLimit)))
+	if balanceAt.Cmp(lowest) <= 0 {
+		return errors.New("")
+	}
+
+	balanceAt.Sub(balanceAt, lowest)
+	tx, err := CreateTransaction(ctx, client, from, to, balanceAt, gas, gasLimit, "0x")
 	if err != nil {
 		return err
 	}
@@ -49,12 +67,8 @@ func Withdraw(ctx context.Context, from, to string) error {
 	return nil
 }
 
-func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to string, value *big.Int) (*types.Transaction, error) {
+func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to string, value, gas *big.Int, gasLimit uint64, input string) (*types.Transaction, error) {
 	receiver := common.HexToAddress(to)
-	var data []byte
-
-	gas := big.NewInt(2000000000) // 设置 tip（最小费用）
-	gasLimit := uint64(21000)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		return nil, err
@@ -64,9 +78,9 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 		gas = gasPrice
 	}
 
-	lowest := new(big.Int).Mul(gas, big.NewInt(int64(gasLimit)))
-	if value.Cmp(lowest) <= 0 {
-		return nil, errors.New("")
+	var data []byte
+	if input != "0x" {
+		data, err = hex.DecodeString(input[2:])
 	}
 
 	// gas limit
@@ -79,13 +93,10 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 		gasLimit = estimateGas
 	}
 
-	value.Sub(value, lowest)
 	nonce, err := getNonce(ctx, client, common.HexToAddress(sender))
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println(gas.String(), value.String())
 
 	return types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
