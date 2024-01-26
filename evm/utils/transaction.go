@@ -2,69 +2,71 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"math/big"
-	"time"
 )
 
-func Withdraw(ctx context.Context, from, to string) {
+func Withdraw(ctx context.Context, from, to string) error {
 	client := ethclient.NewClient(ETHClient)
+	chainID, err := client.ChainID(ctx)
+	if err != nil {
+		return err
+	}
 	balanceAt, err := client.BalanceAt(ctx, common.HexToAddress(from), nil)
 	if err != nil {
-		return
+		return err
 	}
 
-	gasTip := big.NewInt(1000000000) // 设置 tip（最小费用）
-	//gasFeeCap := big.NewInt(5000000000) // 设置 fee cap（最大费用）
-	gasLimit := uint64(21000)
-	lowest := gasTip.Mul(gasTip, new(big.Int).SetUint64(gasLimit))
-	if balanceAt.Cmp(lowest) <= 0 {
-		return
-	}
-
-	tx, err := CreateTransaction(ctx, client, from, to, *balanceAt)
+	tx, err := CreateTransaction(ctx, client, from, to, balanceAt)
 	if err != nil {
-		return
+		return err
 	}
 
-	tx, err = signTransaction(tx, "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf")
+	tx, err = signTransaction(tx, "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf", chainID)
 	if err != nil {
-		return
+		return err
 	}
 
 	err = client.SendTransaction(ctx, tx)
 	if err != nil {
-		return
+		return err
 	}
 
 	receipt, err := waitTransactionReceipt(ctx, client, tx.Hash())
 	if err != nil {
-		return
+		return err
 	}
 
 	fmt.Println(receipt.GasUsed)
+	return nil
 }
 
-func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to string, value big.Int) (*types.Transaction, error) {
-	nonce, err := getNonce(ctx, client, common.HexToAddress(sender))
+func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to string, value *big.Int) (*types.Transaction, error) {
+	receiver := common.HexToAddress(to)
+	var data []byte
+
+	gas := big.NewInt(2000000000) // 设置 tip（最小费用）
+	gasLimit := uint64(21000)
+	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	//gasTip := big.NewInt(1000000000)    // 设置 tip（最小费用）
-	//gasFeeCap := big.NewInt(5000000000) // 设置 fee cap（最大费用）
-	gasLimit := uint64(21000)
-	receiver := common.HexToAddress(to)
-	var data []byte
+	if gas.Cmp(gasPrice) < 0 {
+		gas = gasPrice
+	}
 
-	gasPrice, err := client.SuggestGasPrice(context.Background())
-	if err != nil {
-		return nil, err
+	lowest := new(big.Int).Mul(gas, big.NewInt(int64(gasLimit)))
+	if value.Cmp(lowest) <= 0 {
+		return nil, errors.New("")
 	}
 
 	// gas limit
@@ -77,23 +79,37 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 		gasLimit = estimateGas
 	}
 
+	value.Sub(value, lowest)
+	nonce, err := getNonce(ctx, client, common.HexToAddress(sender))
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(gas.String(), value.String())
+
 	return types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
-		GasPrice: gasPrice,
+		GasPrice: gas,
 		Gas:      gasLimit,
 		To:       &receiver,
-		Value:    &value,
+		Value:    value,
 		Data:     data,
 	}), nil
 }
 
-func signTransaction(tx *types.Transaction, privateKeyHex string) (*types.Transaction, error) {
+func signTransaction(tx *types.Transaction, privateKeyHex string, chainID *big.Int) (*types.Transaction, error) {
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
 	}
 
-	return types.SignTx(tx, types.NewEIP155Signer(tx.ChainId()), privateKey)
+	//publicKey := privateKey.Public()
+	//publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	//if !ok {
+	//}
+	//fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	return types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 }
 
 func getNonce(ctx context.Context, client *ethclient.Client, address common.Address) (uint64, error) {

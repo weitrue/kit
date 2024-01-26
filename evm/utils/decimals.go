@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/shopspring/decimal"
 	"math/big"
+
+	"github.com/shopspring/decimal"
 )
 
 // ToDecimal wei to decimals

@@ -3,12 +3,13 @@ package utils
 import (
 	"encoding/hex"
 	"fmt"
+	"reflect"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/assert"
-	"reflect"
-	"testing"
 )
 
 func TestPublicKeyBytesToAddress(t *testing.T) {

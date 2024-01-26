@@ -3,6 +3,8 @@ package utils
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWithdraw(t *testing.T) {
@@ -26,7 +28,8 @@ func TestWithdraw(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Withdraw(tt.args.ctx, tt.args.from, tt.args.to)
+			err := Withdraw(tt.args.ctx, tt.args.from, tt.args.to)
+			assert.Nil(t, err)
 		})
 	}
 
