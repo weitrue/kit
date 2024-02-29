@@ -101,7 +101,7 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 	return types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
 		GasPrice: gas,
-		Gas:      gasLimit,
+		Gas:      32000,
 		To:       &receiver,
 		Value:    value,
 		Data:     data,
@@ -137,4 +137,21 @@ func waitTransactionReceipt(ctx context.Context, client *ethclient.Client, hash 
 		// 如果交易还未被打包，则等待一段时间再次尝试
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func getBaseFee(client *ethclient.Client, from, to common.Address, gasPrice *big.Int, inputData []byte) (*big.Int, error) {
+	msg := ethereum.CallMsg{
+		To:   &to,
+		From: from,
+		Data: inputData,
+	}
+
+	gasLimit, err := client.EstimateGas(context.Background(), msg)
+	if err != nil {
+		return nil, err
+	}
+
+	// 计算 base fee
+	baseFee := new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(gasLimit))
+	return baseFee, nil
 }

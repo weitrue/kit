@@ -268,7 +268,7 @@ func BytesToRunes(bytes []byte) []rune {
 	return runes
 }
 
-// Float64ToBytes returns the byte slice result converted by rune slice runes.
+// RunesToBytes returns the byte slice result converted by rune slice runes.
 func RunesToBytes(runes []rune) []byte {
 	size := 0
 	for _, r := range runes {

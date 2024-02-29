@@ -51,5 +51,5 @@ func ToWei(value any, decimals int) *big.Int {
 // CalcGasCost calculate gas cost given gas limit (units) and gas price (wei)
 func CalcGasCost(gasLimit uint64, gasPrice *big.Int) *big.Int {
 	gasLimitBig := big.NewInt(int64(gasLimit))
-	return gasLimitBig.Mul(gasLimitBig, gasPrice)
+	return new(big.Int).Mul(gasLimitBig, gasPrice)
 }

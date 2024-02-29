@@ -34,7 +34,7 @@ var (
 	ErrLogServiceNameNotSet = errors.New("log service name must be set")
 )
 
-// SetUp 初始化zap Logger
+// SetUp  init zap Logger
 func SetUp(c Config, opts ...Option) (*zap.Logger, error) {
 	if c.KeepDays == 0 {
 		c.KeepDays = DefaultKeepDays
