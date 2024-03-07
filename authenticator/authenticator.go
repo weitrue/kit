@@ -73,12 +73,12 @@ func Validate(url, code string) (bool, error) {
 		return false, err
 	}
 
-	return totp.Validate(code, key.Secret()), nil
+	return ValidateCode(code, key.Secret()), nil
 }
 
 // ValidateCode 根据secret验证code
-func ValidateCode(secret, code string) (bool, error) {
-	return totp.Validate(code, secret), nil
+func ValidateCode(secret, code string) bool {
+	return totp.Validate(code, secret)
 }
 
 func generateKey(domain, userName string) (*otp.Key, error) {

@@ -103,8 +103,7 @@ func TestGenerateCodeAndSecret(t *testing.T) {
 
 func TestValidateCode(t *testing.T) {
 	// code 可以从当前目录 qrcode.png 获得
-	valid, err := ValidateCode("RVVFRB7H5FEYRQZQUEU37XQ6B74A465S", "428248")
-	assert.Nil(t, err)
+	valid := ValidateCode("RVVFRB7H5FEYRQZQUEU37XQ6B74A465S", "428248")
 	if valid {
 		fmt.Println("Validate Success!")
 	} else {
