@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -58,12 +57,11 @@ func Withdraw(ctx context.Context, from, to string) error {
 		return err
 	}
 
-	receipt, err := waitTransactionReceipt(ctx, client, tx.Hash())
+	_, err = waitTransactionReceipt(ctx, client, tx.Hash())
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(receipt.GasUsed)
 	return nil
 }
 
@@ -139,14 +137,14 @@ func waitTransactionReceipt(ctx context.Context, client *ethclient.Client, hash 
 	}
 }
 
-func getBaseFee(client *ethclient.Client, from, to common.Address, gasPrice *big.Int, inputData []byte) (*big.Int, error) {
+func getBaseFee(ctx context.Context, client *ethclient.Client, from, to common.Address, gasPrice *big.Int, inputData []byte) (*big.Int, error) {
 	msg := ethereum.CallMsg{
 		To:   &to,
 		From: from,
 		Data: inputData,
 	}
 
-	gasLimit, err := client.EstimateGas(context.Background(), msg)
+	gasLimit, err := client.EstimateGas(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -154,4 +152,19 @@ func getBaseFee(client *ethclient.Client, from, to common.Address, gasPrice *big
 	// 计算 base fee
 	baseFee := new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(gasLimit))
 	return baseFee, nil
+}
+
+func decodePreSignTransaction(ctx context.Context, preSign string) (*types.Transaction, error) {
+	tx := new(types.Transaction)
+	decodeBytes, err := hex.DecodeString(preSign[2:])
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.UnmarshalBinary(decodeBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
 }

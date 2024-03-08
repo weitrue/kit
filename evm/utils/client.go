@@ -13,5 +13,6 @@ var (
 	BscClient, _      = rpc.DialContext(context.Background(), "https://binance.llamarpc.com")
 	ArbitrumClient, _ = rpc.DialContext(context.Background(), "https://arb-mainnet.g.alchemy.com/v2/vJawUvyo1NE02qYepEe2n_AtjrX_gF5q")
 	BaseClient, _     = rpc.DialContext(context.Background(), "https://base-mainnet.g.alchemy.com/v2/7XuVI7nNb8mJFfDc_HlEOiFPVNz4lKAz")
+	MerlinClient, _   = rpc.DialContext(context.Background(), "https://rpc.merlinchain.io/api")
 	Sender            = common.HexToAddress("0xba46dd807DD7A5bBe2eE80b6D0516A088223C574")
 )

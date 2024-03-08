@@ -109,7 +109,7 @@ func TestSignTransaction(t *testing.T) {
 				client:   ethclient.NewClient(ETHClient),
 				sender:   "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
 				to:       "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
-				value:    big.NewInt(1),
+				value:    big.NewInt(0),
 				gas:      big.NewInt(5000000000),
 				gasLimit: uint64(21000),
 				input:    "0x",
@@ -120,7 +120,7 @@ func TestSignTransaction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
 			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, "14d1159998efb653b3c1c503c5e8d5904897b9c7b9f26b35bce8bab8c9d787dc", big.NewInt(1))
+			transaction, err = signTransaction(transaction, "14d1159998efb653b3c1c503c5e8d5904897b9c7b9f26b35bce8bab8c9d787dc", big.NewInt(4200))
 			assert.Nil(t, err)
 			bytes, err := transaction.MarshalBinary()
 			assert.Nil(t, err)
@@ -130,16 +130,48 @@ func TestSignTransaction(t *testing.T) {
 			var gasPrice *big.Int
 			if gasPrice, err = tt.args.client.SuggestGasPrice(tt.args.ctx); err != nil {
 				log.Fatal(err)
+				return
 			}
 
 			signer := types.NewEIP155Signer(transaction.ChainId())
 			sender, err := signer.Sender(transaction)
 			assert.Nil(t, err)
+			fmt.Println(sender.String())
 
-			baseFee, err := getBaseFee(tt.args.client, sender, *transaction.To(), gasPrice, transaction.Data())
+			baseFee, err := getBaseFee(tt.args.ctx, tt.args.client, sender, *transaction.To(), gasPrice, transaction.Data())
 			assert.Nil(t, err)
 			fmt.Println(ToDecimal(baseFee, 18).String())
 			fmt.Println(ToDecimal(new(big.Int).Mul(new(big.Int).SetUint64(transaction.Gas()), transaction.GasPrice()), 18).String())
+		})
+	}
+}
+
+func Test_decodeTransactionByPreSign(t *testing.T) {
+	type args struct {
+		ctx      context.Context
+		callData string
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "",
+			args: args{
+				ctx:      context.Background(),
+				callData: "0xf8ab8085012a05f200827d00948de7eea34a72059324dbbed7f2f49fb2190abd5680b844a9059cbb0000000000000000000000003f8ddd0ed8798e46e2e14dfa4b7c8072805548a400000000000000000000000000000000000000000000000029a2241af62c00008220f4a0c853dabab4eacce6c34f142c9edf3ba7aded1afb9b8c82eb7cb69e7ed140ca21a007ce8a293019835d9bafb8b7ab5e7475cc8f50dac570037352c23c0667e46010",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx, err := decodePreSignTransaction(tt.args.ctx, tt.args.callData)
+			assert.Nil(t, err)
+			fmt.Println(tx.Nonce())
+			signer := types.LatestSignerForChainID(tx.ChainId())
+			sender, err := signer.Sender(tx)
+			assert.Nil(t, err)
+			fmt.Println(sender.String())
 		})
 	}
 }
