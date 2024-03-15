@@ -110,7 +110,7 @@ func TestSignTransaction(t *testing.T) {
 				sender:   "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
 				to:       "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
 				value:    big.NewInt(0),
-				gas:      big.NewInt(5000000000),
+				gas:      big.NewInt(6000000000),
 				gasLimit: uint64(21000),
 				input:    "0x",
 			},
@@ -120,7 +120,7 @@ func TestSignTransaction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
 			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, "14d1159998efb653b3c1c503c5e8d5904897b9c7b9f26b35bce8bab8c9d787dc", big.NewInt(4200))
+			transaction, err = signTransaction(transaction, "14d1159998efb653b3c1c503c5e8d5904897b9c7b9f26b35bce8bab8c9d787dc", big.NewInt(1))
 			assert.Nil(t, err)
 			bytes, err := transaction.MarshalBinary()
 			assert.Nil(t, err)

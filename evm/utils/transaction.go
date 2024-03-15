@@ -99,7 +99,7 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 	return types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
 		GasPrice: gas,
-		Gas:      32000,
+		Gas:      gasLimit,
 		To:       &receiver,
 		Value:    value,
 		Data:     data,
