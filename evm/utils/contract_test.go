@@ -32,13 +32,16 @@ func TestCalculateInterfaceId(t *testing.T) {
 				selects = append(selects, method.ID)
 			}
 
+			for _, event := range cABI.Events {
+				fmt.Println(event.ID.Bytes())
+			}
+
 			result := make([]byte, 4)
 			for i := 0; i < 4; i++ {
-				r := selects[i][0]
-				for j := 0; j < len(selects); i++ {
-					r = r ^ selects[j][i]
+				result[i] = selects[0][i]
+				for j := 1; j < len(selects); j++ {
+					result[i] = result[i] ^ selects[j][i]
 				}
-				result[i] = r
 			}
 			fmt.Println(common.Bytes2Hex(result[:]))
 		})
