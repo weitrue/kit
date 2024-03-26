@@ -46,7 +46,12 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 			variable.Type = strings.ReplaceAll(v.Label, "t_", "")
 		}
 
-		if method, ok := abiO.Methods[v.Label]; ok {
+		if method, ok := abiO.Methods[variable.Name]; ok {
+			if len(method.Inputs) == 0 {
+
+			} else {
+
+			}
 			if len(method.Outputs) == 1 {
 				var ret any
 				switch method.Outputs[0].Type.T {
