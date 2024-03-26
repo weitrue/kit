@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"github.com/ethereum/go-ethereum/rpc"
 	"math/big"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func Withdraw(ctx context.Context, from, to string) error {
-	client := ethclient.NewClient(ETHClient)
+func Withdraw(ctx context.Context, c *rpc.Client, from, to string) error {
+	client := ethclient.NewClient(c)
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return err

@@ -1,6 +1,15 @@
 package utils
 
-import "golang.org/x/crypto/sha3"
+import (
+	"context"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+	"golang.org/x/crypto/sha3"
+	"strings"
+)
 
 const (
 	eip165SupportsInterfaceABI = ""
@@ -24,4 +33,49 @@ func calculateSelector(selector string) []byte {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write([]byte(selector))
 	return hash.Sum(nil)[:4]
+}
+
+func DecodeABI(abiStr string) (*abi.ABI, error) {
+	contractAbi, err := abi.JSON(strings.NewReader(abiStr))
+	if err != nil {
+		return nil, err
+	}
+
+	return &contractAbi, nil
+}
+
+func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method, args ...any) (any, error) {
+	to := common.HexToAddress(contract)
+	data := method.ID
+	if len(args) > 0 {
+		input, err := method.Inputs.Pack(args)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, input...)
+	} else {
+		input, err := method.Inputs.Pack()
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, input...)
+	}
+
+	callData := &ethereum.CallMsg{
+		To:   &to,
+		Data: data,
+	}
+
+	client := ethclient.NewClient(c)
+	result, err := client.CallContract(ctx, *callData, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Unpack(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }
