@@ -2,9 +2,11 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"golang.org/x/crypto/sha3"
@@ -77,5 +79,25 @@ func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method
 		return nil, err
 	}
 
-	return out, nil
+	return out[0], nil
+}
+
+func CodeAt(ctx context.Context, c *rpc.Client, contract string) (string, error) {
+	client := ethclient.NewClient(c)
+	code, err := client.CodeAt(ctx, common.HexToAddress(contract), nil)
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Println(common.Bytes2Hex(code))
+
+	return calcCodeHash(code), nil
+}
+
+func calcCodeHash(code []byte) string {
+	if len(code) == 0 {
+		return "0x"
+	}
+
+	return crypto.Keccak256Hash(code).Hex()
 }

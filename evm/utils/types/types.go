@@ -1,5 +1,7 @@
 package types
 
+import "strings"
+
 type Storage struct {
 	AstId    int    `json:"astId"`
 	Contract string `json:"contract"`
@@ -27,4 +29,9 @@ type ContractVariable struct {
 	Name  string `json:"variableName"`
 	Type  string `json:"type"`
 	Value any    `json:"value"`
+}
+
+func IsDynamicType(typeName string) bool {
+	return strings.HasPrefix(typeName, "t_bool") || strings.HasPrefix(typeName, "t_enum") || strings.HasPrefix(typeName, "t_uint") || strings.HasPrefix(typeName, "t_int") ||
+		strings.HasPrefix(typeName, "t_address") || strings.HasPrefix(typeName, "t_contract") || strings.HasPrefix(typeName, "t_string") || strings.HasPrefix(typeName, "t_bytes")
 }

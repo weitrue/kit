@@ -1,9 +1,12 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 )
@@ -44,6 +47,36 @@ func TestCalculateInterfaceId(t *testing.T) {
 				}
 			}
 			fmt.Println(common.Bytes2Hex(result[:]))
+		})
+	}
+}
+
+func TestCodeAt(t *testing.T) {
+	type args struct {
+		ctx      context.Context
+		c        *rpc.Client
+		contract string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr error
+	}{
+		{
+			name: "",
+			args: args{
+				ctx:      context.Background(),
+				c:        ETHClient,
+				contract: "0xa68eea7850fb8fa9bcb003441258de8056166aa3",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CodeAt(tt.args.ctx, tt.args.c, tt.args.contract)
+			assert.Nil(t, err)
+			fmt.Println(got)
 		})
 	}
 }
