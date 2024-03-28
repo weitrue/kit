@@ -45,51 +45,52 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 		}
 		if t, ok := storages.Types[v.Type]; ok {
 			variable.Type = t.Label
-
-			if types.IsDynamicType(v.Type) {
-				if method, exist := abiO.Methods[variable.Name]; exist { //public variable
-					value, err := ParseVariableValue(ctx, c, contract, method)
+			if method, exist := abiO.Methods[variable.Name]; exist { //public variable
+				if len(method.Inputs) == 0 {
+					value, err := Call(ctx, c, contract, method)
 					if err == nil {
 						variable.Value = value
 					}
-					contractVariables = append(contractVariables, variable)
-				} else { // private variable
-
-				}
-			} else {
-				if method, exist := abiO.Methods[variable.Name]; exist { //public variable
-					value, err := ParseVariableValue(ctx, c, contract, method)
-					if err == nil {
-						variable.Value = value
-					}
-				} else {
+				} else if strings.HasPrefix(v.Type, "t_array") {
 					slot, can := new(big.Int).SetString(v.Slot, 10)
 					if can {
 						data, err := StorageAt(ctx, c, contract, slot.Bytes())
 						if err == nil {
-							if len(t.Members) > 0 {
-								for _, m := range t.Members {
-									size := getTypeSize(m.Type)
-									mData, err := extractData(data, uint64(m.Offset), size)
-									if err == nil {
-										fmt.Println(m.Label, parseValue(m.Type, mData))
-									}
+							num := new(big.Int).SetBytes(data).Int64()
+							values := make([]any, num)
+							for i := int64(0); i < num; i++ {
+								value, err := CallWithInput(ctx, c, contract, variable.Name, abiO, big.NewInt(i))
+								if err == nil {
+									values[i] = value
 								}
+							}
+							variable.Value = values
+						}
+					}
+				}
+			} else {
+				slot, can := new(big.Int).SetString(v.Slot, 10)
+				if can {
+					data, err := StorageAt(ctx, c, contract, slot.Bytes())
+					if err == nil {
+						privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+						if err == nil {
+							if privateVariable != nil {
+								variable.Value = privateVariable.Value
 							}
 						}
 					}
 				}
-
-				contractVariables = append(contractVariables, variable)
 			}
 		}
 
+		fmt.Println(variable.String())
 	}
 
 	return contractVariables, nil
 }
 
-func ParseVariableValue(ctx context.Context, c *rpc.Client, contract string, method abi.Method) (any, error) {
+func unpackPublicVariable(ctx context.Context, c *rpc.Client, contract string, method abi.Method, args ...any) (any, error) {
 	if len(method.Inputs) == 0 {
 		switch method.Outputs[0].Type.T {
 		case abi.IntTy, abi.UintTy, abi.BoolTy, abi.StringTy, abi.AddressTy:
@@ -105,10 +106,50 @@ func ParseVariableValue(ctx context.Context, c *rpc.Client, contract string, met
 	return nil, nil
 }
 
-func extractData(data []byte, offset, size uint64) ([]byte, error) {
+func unpackPrivateVariable(data []byte, allType map[string]types.StorageKeyType, keyType string, offSet int) (*types.ContractVariable, error) {
+	if t, ok := allType[keyType]; ok {
+		if types.IsDynamicType(keyType) {
+			size, _ := strconv.Atoi(t.NumberOfBytes)
+			keyData, err := extractData(data, offSet, size)
+			if err != nil {
+				return nil, err
+			}
+
+			return &types.ContractVariable{
+				Type:   t.Label,
+				IsBase: true,
+				Value:  parseValue(keyType, keyData),
+			}, nil
+		}
+
+		if len(t.Members) > 0 { // struct
+			values := make([]*types.ContractVariable, 0)
+			for _, m := range t.Members {
+				mData, err := unpackPrivateVariable(data, allType, m.Type, m.Offset)
+				if err == nil {
+					mData.Name = m.Label
+					values = append(values, mData)
+				}
+			}
+			return &types.ContractVariable{
+				Type:  t.Label,
+				Value: values,
+			}, nil
+		}
+
+		if strings.HasPrefix(keyType, "t_array") {
+			fmt.Println(common.Bytes2Hex(data))
+		}
+
+	}
+
+	return nil, nil
+}
+
+func extractData(data []byte, offset, size int) ([]byte, error) {
 	end := common.HashLength - offset
 	if end < size {
-		return nil, fmt.Errorf("method=state::extractData| end < size")
+		return nil, types.ErrSize
 	}
 	start := end - size
 	return data[start:end], nil
@@ -164,7 +205,8 @@ func parseValue(typeName string, data []byte) any {
 	}
 
 	if strings.HasPrefix(typeName, "t_string") {
-		return string(data)
+		i := strings.Index(string(data), "\u0000")
+		return string(data)[:i]
 	}
 
 	if strings.HasPrefix(typeName, "t_bytes") {

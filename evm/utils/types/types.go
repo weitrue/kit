@@ -1,6 +1,14 @@
 package types
 
-import "strings"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+)
+
+var (
+	ErrSize = errors.New("data size err")
+)
 
 type Storage struct {
 	AstId    int    `json:"astId"`
@@ -13,9 +21,9 @@ type Storage struct {
 
 type StorageKeyType struct {
 	Encoding      string    `json:"encoding"`
-	Key           string    `json:"key"`
 	Label         string    `json:"label"`
 	NumberOfBytes string    `json:"numberOfBytes"`
+	Key           string    `json:"key"`
 	Value         string    `json:"value"`
 	Members       []Storage `json:"members"`
 }
@@ -26,9 +34,15 @@ type ContractStorage struct {
 }
 
 type ContractVariable struct {
-	Name  string `json:"variableName"`
-	Type  string `json:"type"`
-	Value any    `json:"value"`
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	IsBase bool   `json:"isBase"`
+	Value  any    `json:"value"`
+}
+
+func (c *ContractVariable) String() string {
+	byt, _ := json.Marshal(c)
+	return string(byt)
 }
 
 func IsDynamicType(typeName string) bool {

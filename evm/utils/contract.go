@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -46,21 +47,38 @@ func DecodeABI(abiStr string) (*abi.ABI, error) {
 	return &contractAbi, nil
 }
 
-func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method, args ...any) (any, error) {
+func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method) (any, error) {
 	to := common.HexToAddress(contract)
 	data := method.ID
-	if len(args) > 0 {
-		input, err := method.Inputs.Pack(args)
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, input...)
-	} else {
-		input, err := method.Inputs.Pack()
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, input...)
+	callData := &ethereum.CallMsg{
+		To:   &to,
+		Data: data,
+	}
+
+	client := ethclient.NewClient(c)
+	result, err := client.CallContract(ctx, *callData, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := method.Outputs.Unpack(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return out[0], nil
+}
+
+func CallWithInput(ctx context.Context, c *rpc.Client, contract, methodName string, abiO *abi.ABI, args ...any) (any, error) {
+	to := common.HexToAddress(contract)
+	if len(args) == 0 {
+		return nil, errors.New("invalid input")
+	}
+
+	method := abiO.Methods[methodName]
+	data, err := abiO.Pack(methodName, args...)
+	if err != nil {
+		return nil, err
 	}
 
 	callData := &ethereum.CallMsg{
