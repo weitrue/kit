@@ -138,7 +138,7 @@ func unpackPrivateVariable(data []byte, allType map[string]types.StorageKeyType,
 		}
 
 		if strings.HasPrefix(keyType, "t_array") {
-			fmt.Println(common.Bytes2Hex(data))
+			fmt.Println(common.Bytes2Hex(data), keyType)
 		}
 
 	}
