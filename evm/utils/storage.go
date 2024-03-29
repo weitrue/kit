@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/buger/jsonparser"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/weitrue/kit/evm/utils/types"
-	"math/big"
-	"strconv"
-	"strings"
 )
 
 func StorageAt(ctx context.Context, c *rpc.Client, contract string, slot []byte) ([]byte, error) {
@@ -52,21 +55,26 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 						variable.Value = value
 					}
 				} else if strings.HasPrefix(v.Type, "t_array") {
-					slot, can := new(big.Int).SetString(v.Slot, 10)
-					if can {
-						data, err := StorageAt(ctx, c, contract, slot.Bytes())
-						if err == nil {
-							num := new(big.Int).SetBytes(data).Int64()
-							values := make([]any, num)
-							for i := int64(0); i < num; i++ {
-								value, err := CallWithInput(ctx, c, contract, variable.Name, abiO, big.NewInt(i))
-								if err == nil {
-									values[i] = value
+					if !strings.HasSuffix(t.Label, "[]") {
+						fmt.Println(t.Label)
+					} else {
+						slot, can := new(big.Int).SetString(v.Slot, 10)
+						if can {
+							data, err := StorageAt(ctx, c, contract, slot.Bytes())
+							if err == nil {
+								num := new(big.Int).SetBytes(data).Int64()
+								values := make([]any, num)
+								for i := int64(0); i < num; i++ {
+									value, err := CallWithInput(ctx, c, contract, variable.Name, abiO, big.NewInt(i))
+									if err == nil {
+										values[i] = value
+									}
 								}
+								variable.Value = values
 							}
-							variable.Value = values
 						}
 					}
+
 				}
 			} else {
 				slot, can := new(big.Int).SetString(v.Slot, 10)
@@ -85,6 +93,146 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 		}
 
 		fmt.Println(variable.String())
+	}
+
+	return contractVariables, nil
+}
+
+func ParseVyPerStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, abiStr string) (any, error) {
+	value, _, _, err := jsonparser.Get([]byte(storage), "storage_layout")
+	if err == nil && len(value) > 0 {
+		type VyPerStorage struct {
+			StorageLayout map[string]types.VyPerStorage `json:"storage_layout"`
+			CodeLayout    map[string]types.VyPerLayout  `json:"code_layout"`
+		}
+
+		data := new(VyPerStorage)
+		err = json.Unmarshal([]byte(storage), &data)
+		if err == nil {
+			return ParseVyPerStorage(ctx, c, contract, abiStr, data.StorageLayout)
+		}
+	}
+
+	if strings.Contains(storage, "nonreentrant.") {
+		data := make(map[string]types.VyPerStorage)
+		err = json.Unmarshal([]byte(storage), &data)
+		if err == nil {
+			return ParseVyPerStorage(ctx, c, contract, abiStr, data)
+		}
+	}
+
+	return nil, types.ErrUnsupportedStorage
+}
+
+func ParseVyPerStorage(ctx context.Context, c *rpc.Client, contract, abiStr string, storageLayout map[string]types.VyPerStorage) ([]types.ContractVariable, error) {
+	contractVariables := make([]types.ContractVariable, 0)
+	abiO, err := DecodeABI(abiStr)
+	if err != nil {
+		return contractVariables, err
+	}
+
+	if len(storageLayout) == 0 {
+		return contractVariables, nil
+	}
+
+	storages := make(types.VyPerStorageLayouts, 0)
+	for k, v := range storageLayout {
+		if strings.Contains(k, "nonreentrant.") {
+			continue
+		}
+
+		storages = append(storages, &types.VyPerStorageLayout{
+			Label:        k,
+			VyPerStorage: v,
+		})
+	}
+
+	sort.Sort(storages)
+	for _, v := range storages {
+		if ok, size := isSupported(v.Type); ok {
+			variable := types.ContractVariable{
+				Name: v.Label,
+				Type: v.Type,
+			}
+			if method, exist := abiO.Methods[variable.Name]; exist { //public variable
+				if len(method.Inputs) == 0 {
+					value, err := Call(ctx, c, contract, method)
+					if err == nil {
+						if strings.HasPrefix(v.Type, "int") || strings.HasPrefix(v.Type, "uint") {
+							if vv, can := value.(*big.Int); can {
+								value = vv.String()
+							}
+						}
+
+						//if strings.HasPrefix(v.Type, "bytes") {
+						//	if len(v.Type) > 5 {
+						//		le := v.Type[5:]
+						//		siz, _ := strconv.Atoi(le)
+						//		switch siz {
+						//		case 1:
+						//			if vv, can := value.([1]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 2:
+						//			if vv, can := value.([2]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 4:
+						//			if vv, can := value.([4]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 8:
+						//			if vv, can := value.([8]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 16:
+						//			if vv, can := value.([16]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 32:
+						//			if vv, can := value.([32]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 64:
+						//			if vv, can := value.([64]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 128:
+						//			if vv, can := value.([128]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		case 256:
+						//			if vv, can := value.([256]uint8); can {
+						//				value = strings.TrimRight(string(vv[:]), "\x00")
+						//			}
+						//		default:
+						//
+						//		}
+						//	}
+						//
+						//}
+
+						variable.Value = value
+					}
+					fmt.Println(variable)
+					contractVariables = append(contractVariables, variable)
+				}
+			} else {
+				slot := big.NewInt(v.Slot)
+				data, err := StorageAt(ctx, c, contract, slot.Bytes())
+				if err == nil {
+					keyData, err := extractData(data, 0, size)
+					if err != nil {
+						return nil, err
+					}
+					if err == nil {
+						variable.Value = parseVyPerValue(v.Type, keyData)
+					}
+				}
+				fmt.Println(variable)
+				contractVariables = append(contractVariables, variable)
+			}
+		}
 	}
 
 	return contractVariables, nil
@@ -138,7 +286,11 @@ func unpackPrivateVariable(data []byte, allType map[string]types.StorageKeyType,
 		}
 
 		if strings.HasPrefix(keyType, "t_array") {
-			fmt.Println(common.Bytes2Hex(data), keyType)
+			if !strings.HasSuffix(t.Label, "[]") {
+				fmt.Println(t.Label)
+			} else {
+
+			}
 		}
 
 	}
@@ -180,7 +332,6 @@ func getTypeSize(typeName string) uint64 {
 	} else if strings.HasPrefix(typeName, "t_string") {
 	} else if strings.HasPrefix(typeName, "t_bytes") {
 		// TODO: byte32 类型
-		// panic("not impl")
 		return 32
 	} else {
 		// panic("not impl!")
@@ -210,6 +361,69 @@ func parseValue(typeName string, data []byte) any {
 	}
 
 	if strings.HasPrefix(typeName, "t_bytes") {
+		return common.Bytes2Hex(data)
+	}
+
+	return string(data)
+}
+
+func isSupported(typeName string) (bool, int) {
+	if strings.HasSuffix(typeName, "]") {
+		return false, 0
+	}
+
+	if strings.HasPrefix(typeName, "bool") {
+		return true, 1
+	}
+
+	if strings.HasPrefix(typeName, "uint") {
+		sizeStr := typeName[4:]
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil {
+			return false, 0
+		}
+		return true, size / 8
+	}
+	if strings.HasPrefix(typeName, "int") {
+		sizeStr := typeName[3:]
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil {
+			return false, 0
+		}
+		return true, size / 8
+	}
+	if strings.HasPrefix(typeName, "address") || strings.HasPrefix(typeName, "contract") {
+		return true, 20
+	}
+	if strings.HasPrefix(typeName, "bytes") {
+		return true, 32
+	}
+
+	return false, 0
+}
+
+func parseVyPerValue(typeName string, data []byte) any {
+	if strings.HasPrefix(typeName, "bool") {
+		return new(big.Int).SetBytes(data).Cmp(common.Big0) > 0
+	}
+	if strings.HasPrefix(typeName, "uint") || strings.HasPrefix(typeName, "enum") {
+		return new(big.Int).SetBytes(data).String()
+	}
+
+	if strings.HasPrefix(typeName, "int") {
+		return new(big.Int).SetBytes(data).String()
+	}
+
+	if strings.HasPrefix(typeName, "address") || strings.HasPrefix(typeName, "contract") {
+		return strings.ToLower(common.BytesToAddress(data).Hex())
+	}
+
+	if strings.HasPrefix(typeName, "string") {
+		i := strings.Index(string(data), "\u0000")
+		return string(data)[:i]
+	}
+
+	if strings.HasPrefix(typeName, "bytes") {
 		return common.Bytes2Hex(data)
 	}
 
