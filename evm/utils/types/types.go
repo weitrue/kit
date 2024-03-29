@@ -24,6 +24,7 @@ type StorageKeyType struct {
 	Encoding      string    `json:"encoding"`
 	Label         string    `json:"label"`
 	NumberOfBytes string    `json:"numberOfBytes"`
+	Base          string    `json:"base"`
 	Key           string    `json:"key"`
 	Value         string    `json:"value"`
 	Members       []Storage `json:"members"`

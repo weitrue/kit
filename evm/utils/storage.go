@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
+	"golang.org/x/crypto/sha3"
 	"math/big"
 	"sort"
 	"strconv"
@@ -77,18 +79,76 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 
 				}
 			} else {
-				slot, can := new(big.Int).SetString(v.Slot, 10)
+				slotP, can := new(big.Int).SetString(v.Slot, 10)
 				if can {
-					data, err := StorageAt(ctx, c, contract, slot.Bytes())
-					if err == nil {
-						privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+					if strings.HasPrefix(v.Type, "t_array") { // 数组类型
+						if !strings.HasSuffix(t.Label, "[]") { //定长
+							siz := t.Label[strings.Index(t.Label, "[")+1 : len(t.Label)-1]
+							s, _ := strconv.Atoi(siz)
+							datas := make([]any, s)
+							for i := int64(0); i < int64(s); i++ {
+								data, err := StorageAt(ctx, c, contract, new(big.Int).Add(slotP, big.NewInt(i)).Bytes())
+								if err == nil {
+									privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
+									if err == nil {
+										if privateVariable != nil {
+											datas[i] = privateVariable.Value
+										}
+									}
+								}
+							}
+							variable.Value = datas
+						} else {
+							slot := crypto.Keccak256(slotP.Bytes())
+							slot = append(slot, big.NewInt(1).Bytes()...)
+							data, err := StorageAt(ctx, c, contract, crypto.Keccak256(slot))
+							if err == nil {
+								privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
+								if err == nil {
+									if privateVariable != nil {
+										variable.Value = privateVariable.Value
+									}
+								}
+							}
+						}
+
+					} else if strings.HasPrefix(v.Type, "t_mapping") {
+
+					} else if strings.HasPrefix(v.Type, "t_string") {
+						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
 						if err == nil {
-							if privateVariable != nil {
-								variable.Value = privateVariable.Value
+							dataS := common.Bytes2Hex(data)
+							if strings.HasPrefix(dataS, "0") {
+								decimal, err := strconv.ParseInt(dataS, 16, 64)
+								if err == nil && decimal > 0 && decimal%2 > 0 {
+									fmt.Println(common.Bytes2Hex(crypto.Keccak256([]byte(v.Slot))))
+									data, err = StorageAt(ctx, c, contract, common.Hex2Bytes("0x68747470733a2f2f6e667473746f726167652e6c696e6b2f697066732f626166"))
+									fmt.Println(common.Bytes2Hex(data))
+								}
+							} else {
+								privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+								if err == nil {
+									if privateVariable != nil {
+										variable.Value = privateVariable.Value
+									}
+								}
+							}
+
+						}
+					} else {
+						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
+						if err == nil {
+							privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+							if err == nil {
+								if privateVariable != nil {
+									variable.Value = privateVariable.Value
+								}
 							}
 						}
 					}
+
 				}
+
 			}
 		}
 
@@ -96,6 +156,12 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 	}
 
 	return contractVariables, nil
+}
+
+func keccak256(data []byte) []byte {
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(data)
+	return hash.Sum(nil)
 }
 
 func ParseVyPerStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, abiStr string) (any, error) {
