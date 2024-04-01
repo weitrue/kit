@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/sha3"
+	"math"
 	"math/big"
 	"sort"
 	"strconv"
@@ -117,14 +118,23 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 					} else if strings.HasPrefix(v.Type, "t_string") {
 						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
 						if err == nil {
-							dataS := common.Bytes2Hex(data)
-							if strings.HasPrefix(dataS, "0") {
-								decimal, err := strconv.ParseInt(dataS, 16, 64)
-								if err == nil && decimal > 0 && decimal%2 > 0 {
-									fmt.Println(common.Bytes2Hex(crypto.Keccak256([]byte(v.Slot))))
-									data, err = StorageAt(ctx, c, contract, common.Hex2Bytes("0x68747470733a2f2f6e667473746f726167652e6c696e6b2f697066732f626166"))
+							dataS := common.Bytes2Hex(data[31:])
+							decimal, err := strconv.ParseInt(dataS, 16, 64)
+							if err == nil && decimal%2 > 0 {
+								slots := int(math.Ceil(float64(decimal/2) / float64(32)))
+								sB, _ := new(big.Int).SetString(v.Slot, 10)
+								sbd := crypto.Keccak256(sB.Bytes())
+								for i := 0; i < slots; i++ {
+									if i > 0 {
+										sbd[31] = sbd[31] + byte(1)
+									} else {
+										sbd[31] = sbd[31] + byte(i)
+									}
+									fmt.Println(common.Bytes2Hex(sbd))
+									data, err = StorageAt(ctx, c, contract, sbd)
 									fmt.Println(common.Bytes2Hex(data))
 								}
+
 							} else {
 								privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
 								if err == nil {
@@ -133,7 +143,6 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 									}
 								}
 							}
-
 						}
 					} else {
 						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
