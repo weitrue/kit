@@ -16,7 +16,7 @@ func TestStorage(t *testing.T) {
 		ctx             context.Context
 		client          *rpc.Client
 		contractAddress string
-		slot            []byte
+		slot            common.Hash
 	}
 	tests := []struct {
 		name    string
@@ -30,7 +30,7 @@ func TestStorage(t *testing.T) {
 				ctx:             context.Background(),
 				client:          ETHClient,
 				contractAddress: "0x39ca0a6438b6050ea2ac909ba65920c7451305c1",
-				slot:            common.Hex2Bytes("0x611ea165ca9257827fc43d2954fdae7d825e82c825d9037db9337fa1bfa93100"),
+				slot:            common.HexToHash("0x611ea165ca9257827fc43d2954fdae7d825e82c825d9037db9337fa1bfa93100"),
 			},
 		},
 	}

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/sha3"
-	"math"
 	"math/big"
 	"sort"
 	"strconv"
@@ -16,29 +16,25 @@ import (
 	"github.com/buger/jsonparser"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/weitrue/kit/evm/utils/types"
 )
 
-func StorageAt(ctx context.Context, c *rpc.Client, contract string, slot []byte) ([]byte, error) {
-	client := ethclient.NewClient(c)
-	storageAt, err := client.StorageAt(ctx, common.HexToAddress(contract), common.BytesToHash(slot), nil)
+func StorageAt(ctx context.Context, c *rpc.Client, contract string, slot common.Hash) ([]byte, error) {
+	var (
+		res hexutil.Bytes
+	)
+	err := c.CallContext(ctx, &res, "eth_getStorageAt", common.HexToAddress(contract), slot, "latest")
 	if err != nil {
 		return nil, err
 	}
 
-	return storageAt, nil
+	return res, nil
 }
 
 func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, abiStr string) (any, error) {
-	abiO, err := DecodeABI(abiStr)
-	if err != nil {
-		return nil, err
-	}
-
 	storages := new(types.ContractStorage)
-	err = json.Unmarshal([]byte(storage), &storages)
+	err := json.Unmarshal([]byte(storage), &storages)
 	if err != nil {
 		return nil, errors.New("invalid contract")
 	}
@@ -51,113 +47,90 @@ func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, a
 		}
 		if t, ok := storages.Types[v.Type]; ok {
 			variable.Type = t.Label
-			if method, exist := abiO.Methods[variable.Name]; exist { //public variable
-				if len(method.Inputs) == 0 {
-					value, err := Call(ctx, c, contract, method)
-					if err == nil {
-						variable.Value = value
-					}
-				} else if strings.HasPrefix(v.Type, "t_array") {
-					if !strings.HasSuffix(t.Label, "[]") {
-						fmt.Println(t.Label)
-					} else {
-						slot, can := new(big.Int).SetString(v.Slot, 10)
-						if can {
-							data, err := StorageAt(ctx, c, contract, slot.Bytes())
-							if err == nil {
-								num := new(big.Int).SetBytes(data).Int64()
-								values := make([]any, num)
-								for i := int64(0); i < num; i++ {
-									value, err := CallWithInput(ctx, c, contract, variable.Name, abiO, big.NewInt(i))
-									if err == nil {
-										values[i] = value
-									}
-								}
-								variable.Value = values
-							}
-						}
-					}
-
-				}
-			} else {
-				slotP, can := new(big.Int).SetString(v.Slot, 10)
-				if can {
-					if strings.HasPrefix(v.Type, "t_array") { // 数组类型
-						if !strings.HasSuffix(t.Label, "[]") { //定长
-							siz := t.Label[strings.Index(t.Label, "[")+1 : len(t.Label)-1]
-							s, _ := strconv.Atoi(siz)
-							datas := make([]any, s)
-							for i := int64(0); i < int64(s); i++ {
-								data, err := StorageAt(ctx, c, contract, new(big.Int).Add(slotP, big.NewInt(i)).Bytes())
-								if err == nil {
-									privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
-									if err == nil {
-										if privateVariable != nil {
-											datas[i] = privateVariable.Value
-										}
-									}
-								}
-							}
-							variable.Value = datas
-						} else {
-							slot := crypto.Keccak256(slotP.Bytes())
-							slot = append(slot, big.NewInt(1).Bytes()...)
-							data, err := StorageAt(ctx, c, contract, crypto.Keccak256(slot))
-							if err == nil {
-								privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
-								if err == nil {
-									if privateVariable != nil {
-										variable.Value = privateVariable.Value
-									}
-								}
-							}
-						}
-
-					} else if strings.HasPrefix(v.Type, "t_mapping") {
-
-					} else if strings.HasPrefix(v.Type, "t_string") {
-						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
+			slotP, _ := new(big.Int).SetString(v.Slot, 10)
+			slotKey := common.BigToHash(slotP)
+			if strings.HasPrefix(v.Type, "t_array") { // 数组类型
+				if !strings.HasSuffix(t.Label, "[]") { //定长
+					siz := t.Label[strings.Index(t.Label, "[")+1 : len(t.Label)-1]
+					s, _ := strconv.Atoi(siz)
+					datas := make([]any, s)
+					for i := int64(0); i < int64(s); i++ {
+						data, err := StorageAt(ctx, c, contract, slotKey)
 						if err == nil {
-							dataS := common.Bytes2Hex(data[31:])
-							decimal, err := strconv.ParseInt(dataS, 16, 64)
-							if err == nil && decimal%2 > 0 {
-								slots := int(math.Ceil(float64(decimal/2) / float64(32)))
-								sB, _ := new(big.Int).SetString(v.Slot, 10)
-								sbd := crypto.Keccak256(sB.Bytes())
-								for i := 0; i < slots; i++ {
-									if i > 0 {
-										sbd[31] = sbd[31] + byte(1)
-									} else {
-										sbd[31] = sbd[31] + byte(i)
-									}
-									fmt.Println(common.Bytes2Hex(sbd))
-									data, err = StorageAt(ctx, c, contract, sbd)
-									fmt.Println(common.Bytes2Hex(data))
-								}
-
-							} else {
-								privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
-								if err == nil {
-									if privateVariable != nil {
-										variable.Value = privateVariable.Value
-									}
-								}
-							}
-						}
-					} else {
-						data, err := StorageAt(ctx, c, contract, slotP.Bytes())
-						if err == nil {
-							privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+							privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
 							if err == nil {
 								if privateVariable != nil {
-									variable.Value = privateVariable.Value
+									datas[i] = privateVariable.Value
 								}
 							}
 						}
+						dataSlotBig := new(big.Int).Add(slotKey.Big(), big.NewInt(1))
+						slotKey = common.BigToHash(dataSlotBig)
 					}
-
+					variable.Value = datas
+				} else {
+					slot := crypto.Keccak256(slotP.Bytes())
+					slot = append(slot, big.NewInt(1).Bytes()...)
+					data, err := StorageAt(ctx, c, contract, slotKey)
+					if err == nil {
+						privateVariable, err := unpackPrivateVariable(data, storages.Types, t.Base, v.Offset)
+						if err == nil {
+							if privateVariable != nil {
+								variable.Value = privateVariable.Value
+							}
+						}
+					}
 				}
 
+			} else if strings.HasPrefix(v.Type, "t_mapping") {
+
+			} else if strings.HasPrefix(v.Type, "t_string") {
+				data, err := StorageAt(ctx, c, contract, slotKey)
+				if err == nil {
+					dataS := common.Bytes2Hex(data[31:])
+					decimal, err := strconv.ParseInt(dataS, 16, 64)
+					if err == nil && decimal%2 > 0 {
+						size := (decimal - 1) / 2
+						dataSlotKey := crypto.Keccak256Hash(slotKey.Bytes())
+						val := ""
+						for size/32 > 0 {
+							rawData, err := StorageAt(ctx, c, contract, dataSlotKey)
+							if err == nil {
+								val += string(rawData)
+							}
+							dataSlotBig := new(big.Int).Add(dataSlotKey.Big(), big.NewInt(1))
+							dataSlotKey = common.BigToHash(dataSlotBig)
+							size -= 32
+						}
+
+						if size > 0 {
+							rawData, err := StorageAt(ctx, c, contract, dataSlotKey)
+							if err == nil {
+								val += string(rawData[:size])
+							}
+						}
+						if len(val) > 0 {
+							variable.Value = val
+						}
+					} else {
+						privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+						if err == nil {
+							if privateVariable != nil {
+								variable.Value = privateVariable.Value
+							}
+						}
+					}
+				}
+			} else {
+				data, err := StorageAt(ctx, c, contract, slotKey)
+				if err == nil {
+					privateVariable, err := unpackPrivateVariable(data, storages.Types, v.Type, v.Offset)
+					if err == nil {
+						if privateVariable != nil {
+							variable.Value = privateVariable.Value
+						}
+					}
+				}
 			}
 		}
 
@@ -294,7 +267,7 @@ func ParseVyPerStorage(ctx context.Context, c *rpc.Client, contract, abiStr stri
 				}
 			} else {
 				slot := big.NewInt(v.Slot)
-				data, err := StorageAt(ctx, c, contract, slot.Bytes())
+				data, err := StorageAt(ctx, c, contract, common.BigToHash(slot))
 				if err == nil {
 					keyData, err := extractData(data, 0, size)
 					if err != nil {
