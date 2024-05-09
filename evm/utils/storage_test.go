@@ -140,7 +140,7 @@ func TestParseStorageLayout(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseStorageLayout(tt.args.ctx, tt.args.c, tt.args.contract, tt.args.storage, tt.args.abiStr)
+			got, err := ParseStorageLayout(tt.args.ctx, tt.args.c, tt.args.contract, tt.args.storage)
 			assert.Nil(t, err)
 			fmt.Println(got)
 		})

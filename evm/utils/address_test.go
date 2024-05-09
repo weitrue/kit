@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"crypto"
 	"encoding/hex"
 	"fmt"
 	"reflect"
@@ -48,4 +49,10 @@ func TestName(t *testing.T) {
 	assert.Nil(t, err)
 
 	fmt.Println(sender.Hex())
+
+	fmt.Println(len("0x05416460deb76d57af601be17e777b93592d8d4d4a4096c57876a91c84f4a712"))
+	md5 := crypto.MD5.New()
+	md5.Write([]byte("hrbxywp@163.com"))
+	fmt.Println(hex.EncodeToString(md5.Sum(nil)))
+
 }

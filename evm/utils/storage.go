@@ -32,7 +32,7 @@ func StorageAt(ctx context.Context, c *rpc.Client, contract string, slot common.
 	return res, nil
 }
 
-func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage, abiStr string) (any, error) {
+func ParseStorageLayout(ctx context.Context, c *rpc.Client, contract, storage string) (any, error) {
 	storages := new(types.ContractStorage)
 	err := json.Unmarshal([]byte(storage), &storages)
 	if err != nil {

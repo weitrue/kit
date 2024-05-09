@@ -98,6 +98,7 @@ func TestSignTransaction(t *testing.T) {
 		gas      *big.Int
 		gasLimit uint64
 		input    string
+		chainId  *big.Int
 	}
 	tests := []struct {
 		name    string
@@ -110,8 +111,9 @@ func TestSignTransaction(t *testing.T) {
 			args: args{
 				ctx:      context.Background(),
 				client:   ethclient.NewClient(ETHClient),
-				sender:   "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
-				to:       "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
+				chainId:  big.NewInt(1),
+				sender:   "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
+				to:       "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
 				value:    big.NewInt(0),
 				gas:      big.NewInt(6000000000),
 				gasLimit: uint64(21000),
@@ -123,7 +125,7 @@ func TestSignTransaction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
 			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, "14d1159998efb653b3c1c503c5e8d5904897b9c7b9f26b35bce8bab8c9d787dc", big.NewInt(1))
+			transaction, err = signTransaction(transaction, "b79bffb5b9e2303a9bdd5b0a5638f81705f5f813f5fa7c219257a3b0cffca49d", tt.args.chainId)
 			assert.Nil(t, err)
 			bytes, err := transaction.MarshalBinary()
 			assert.Nil(t, err)
@@ -162,7 +164,7 @@ func Test_decodeTransactionByPreSign(t *testing.T) {
 			name: "",
 			args: args{
 				ctx:      context.Background(),
-				callData: "0xf8ab8085012a05f200827d00948de7eea34a72059324dbbed7f2f49fb2190abd5680b844a9059cbb0000000000000000000000003f8ddd0ed8798e46e2e14dfa4b7c8072805548a400000000000000000000000000000000000000000000000029a2241af62c00008220f4a0c853dabab4eacce6c34f142c9edf3ba7aded1afb9b8c82eb7cb69e7ed140ca21a007ce8a293019835d9bafb8b7ab5e7475cc8f50dac570037352c23c0667e46010",
+				callData: "0xf8650484b2d05e00825208943d497994fff1d1ace609b83b8ac440b5d6f04cf603808220f3a0f987a52e0241e525e3e52ade0553cc9232c7e3033225ba93b3eced81df6e62e5a058e5b5bccf724c1622f87c5e7e8e499cd63b970c1ddbb7ce5f6bed67679b3aec",
 			},
 		},
 	}

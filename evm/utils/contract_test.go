@@ -80,3 +80,45 @@ func TestCodeAt(t *testing.T) {
 		})
 	}
 }
+
+func TestCall(t *testing.T) {
+	type args struct {
+		ctx      context.Context
+		c        *rpc.Client
+		contract string
+		method   abi.Method
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    any
+		wantErr error
+	}{
+		{
+			name: "",
+			args: args{
+				ctx:      context.Background(),
+				c:        MerlinClient,
+				contract: "0xe29a6620dac789b8a76e9b9ec8fe9b7cf2b663d5",
+				method: abi.Method{
+					Name:    "balanceOf",
+					RawName: "balanceOf",
+					Type:    abi.Function,
+					Inputs:  []abi.Argument{},
+					Outputs: []abi.Argument{
+						{},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decodeABI, err := DecodeABI("[{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]")
+			assert.Nil(t, err)
+			got, err := Call(tt.args.ctx, tt.args.c, tt.args.contract, decodeABI.Methods["owner"])
+			assert.Nil(t, err)
+			fmt.Println(got)
+		})
+	}
+}
