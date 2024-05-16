@@ -2,14 +2,17 @@ package utils
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/status-im/keycard-go/hexutils"
 	"log"
 	"math/big"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -90,15 +93,16 @@ func TestCreateTransaction(t *testing.T) {
 
 func TestSignTransaction(t *testing.T) {
 	type args struct {
-		ctx      context.Context
-		client   *ethclient.Client
-		sender   string
-		to       string
-		value    *big.Int
-		gas      *big.Int
-		gasLimit uint64
-		input    string
-		chainId  *big.Int
+		ctx        context.Context
+		client     *ethclient.Client
+		sender     string
+		to         string
+		value      *big.Int
+		gas        *big.Int
+		gasLimit   uint64
+		input      string
+		chainId    *big.Int
+		privateKey string
 	}
 	tests := []struct {
 		name    string
@@ -107,17 +111,33 @@ func TestSignTransaction(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "",
+			name: "ETH",
 			args: args{
-				ctx:      context.Background(),
-				client:   ethclient.NewClient(ETHClient),
-				chainId:  big.NewInt(1),
-				sender:   "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
-				to:       "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
-				value:    big.NewInt(0),
-				gas:      big.NewInt(6000000000),
-				gasLimit: uint64(21000),
-				input:    "0x",
+				ctx:        context.Background(),
+				client:     ethclient.NewClient(ETHClient),
+				chainId:    big.NewInt(1),
+				sender:     "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
+				to:         "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
+				value:      big.NewInt(0),
+				gas:        big.NewInt(6000000000),
+				gasLimit:   uint64(21000),
+				input:      "0x",
+				privateKey: "b79bffb5b9e2303a9bdd5b0a5638f81705f5f813f5fa7c219257a3b0cffca49d",
+			},
+		},
+		{
+			name: "Manta",
+			args: args{
+				ctx:        context.Background(),
+				client:     ethclient.NewClient(ETHClient),
+				chainId:    big.NewInt(169),
+				sender:     "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
+				to:         "0x6b65dD3537AF63A285e0a008ecbcbE725ccB8fd2",
+				value:      big.NewInt(0),
+				gas:        big.NewInt(6000000000),
+				gasLimit:   uint64(21000),
+				input:      "0x",
+				privateKey: "b79bffb5b9e2303a9bdd5b0a5638f81705f5f813f5fa7c219257a3b0cffca49d",
 			},
 		},
 	}
@@ -125,10 +145,11 @@ func TestSignTransaction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
 			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, "b79bffb5b9e2303a9bdd5b0a5638f81705f5f813f5fa7c219257a3b0cffca49d", tt.args.chainId)
+			transaction, err = signTransaction(transaction, tt.args.privateKey, tt.args.chainId)
 			assert.Nil(t, err)
 			bytes, err := transaction.MarshalBinary()
 			assert.Nil(t, err)
+			fmt.Println("pre sign")
 			fmt.Println(hexutil.Encode(bytes))
 
 			// 获取当前 gas price
@@ -141,10 +162,11 @@ func TestSignTransaction(t *testing.T) {
 			signer := types.NewEIP155Signer(transaction.ChainId())
 			sender, err := signer.Sender(transaction)
 			assert.Nil(t, err)
+			fmt.Println("sender")
 			fmt.Println(sender.String())
-
 			baseFee, err := getBaseFee(tt.args.ctx, tt.args.client, sender, *transaction.To(), gasPrice, transaction.Data())
 			assert.Nil(t, err)
+			fmt.Println("Fee")
 			fmt.Println(ToDecimal(baseFee, 18).String())
 			fmt.Println(ToDecimal(new(big.Int).Mul(new(big.Int).SetUint64(transaction.Gas()), transaction.GasPrice()), 18).String())
 		})
@@ -167,16 +189,49 @@ func Test_decodeTransactionByPreSign(t *testing.T) {
 				callData: "0xf8650484b2d05e00825208943d497994fff1d1ace609b83b8ac440b5d6f04cf603808220f3a0f987a52e0241e525e3e52ade0553cc9232c7e3033225ba93b3eced81df6e62e5a058e5b5bccf724c1622f87c5e7e8e499cd63b970c1ddbb7ce5f6bed67679b3aec",
 			},
 		},
+		{
+			name: "manta",
+			args: args{
+				ctx:      context.Background(),
+				callData: "0xf866808501de9027e8825208946b65dd3537af63a285e0a008ecbcbe725ccb8fd28080820175a080b8076c2d40b89983c232ac00565d8f3c79e25049bca6ddb6ceddd1ead4567fa0798669d54d8bc0d5810dde0c4ba756bf12f94bc396d534c8335ecc619387c759",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tx, err := decodePreSignTransaction(tt.args.ctx, tt.args.callData)
 			assert.Nil(t, err)
-			fmt.Println(tx.Nonce())
+			fmt.Println(tx.Nonce(), tx.ChainId().String())
 			signer := types.LatestSignerForChainID(tx.ChainId())
 			sender, err := signer.Sender(tx)
 			assert.Nil(t, err)
 			fmt.Println(sender.String())
 		})
 	}
+}
+
+func TestName1(t *testing.T) {
+	str := "b530f66688e58ad957574aa09e98cf209b40b782562ee3a9aaaa685f34f5be632618f4c64805526a3092d41f25597ccfe4dd82166644607b"
+	decode, err := hex.DecodeString(str)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	for len(decode) > 0 {
+		// 解码第一个 UTF-8 编码字符
+		r, size := utf8.DecodeRune(decode)
+		if r == utf8.RuneError && size == 1 {
+			// 如果遇到无效的 UTF-8 编码字符，则返回 false
+			fmt.Println("Invalid UTF-8 encoding")
+			return
+		}
+		// 跳过已解码的字节
+		decode = decode[size:]
+	}
+	fmt.Println(utf8.Valid(decode))
+
+	fmt.Println(string(decode))
+	byt := hexutils.HexToBytes(str)
+	fmt.Println(string(byt))
 }

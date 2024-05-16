@@ -16,4 +16,5 @@ var (
 	MerlinClient, _   = rpc.DialContext(context.Background(), "https://rpc.merlinchain.io/api")
 	Sender            = common.HexToAddress("0xba46dd807DD7A5bBe2eE80b6D0516A088223C574")
 	EthForkClient, _  = rpc.DialContext(context.Background(), "https://rpc-dev.phalcon.blocksec.com/rpc_672bb0b921e64497a127b102e9d35db6")
+	MantaClient, _    = rpc.DialContext(context.Background(), "https://pacific-rpc.manta.network/http")
 )

@@ -49,10 +49,11 @@ func TestName(t *testing.T) {
 	assert.Nil(t, err)
 
 	fmt.Println(sender.Hex())
-
-	fmt.Println(len("0x05416460deb76d57af601be17e777b93592d8d4d4a4096c57876a91c84f4a712"))
 	md5 := crypto.MD5.New()
-	md5.Write([]byte("hrbxywp@163.com"))
+	md5.Write([]byte("raymond@blocksec.com"))
 	fmt.Println(hex.EncodeToString(md5.Sum(nil)))
+
+	fmt.Println(len("bc1pc72wfxt28739kr0pa64nde09rzgwe8sw792nmxgu3pxwdfj8yymqmmhjl3"))
+	fmt.Println(len("NativeLoader1111111111111111111111111111111"))
 
 }
