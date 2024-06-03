@@ -16,6 +16,7 @@ const (
 type Job interface {
 	cron.Job
 	Frequency() string
+	SetEntityId(entityId cron.EntryID)
 }
 
 type CronManage struct {
@@ -42,10 +43,11 @@ func (m *CronManage) Register(job ...Job) (int, error) {
 	msg := ""
 	count := 0
 	for i, j := range job {
-		_, err := m.cron.AddJob(j.Frequency(), j)
+		entityId, err := m.cron.AddFunc(j.Frequency(), j.Run)
 		if err != nil {
 			msg += fmt.Sprintf("%d:%v ", i, err)
 		}
+		j.SetEntityId(entityId)
 	}
 
 	if len(msg) > 0 {
@@ -74,4 +76,13 @@ func (m *CronManage) Stop() {
 
 func (m *CronManage) Entries() []cron.Entry {
 	return m.cron.Entries()
+}
+
+func (m *CronManage) RemoveEntity(entityId cron.EntryID) {
+	entries := m.Entries()
+	for _, v := range entries {
+		if v.ID == entityId {
+			m.cron.Remove(entityId)
+		}
+	}
 }

@@ -1,6 +1,8 @@
 package crons
 
 import (
+	"fmt"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 	"log"
 	"testing"
@@ -13,26 +15,35 @@ import (
 
 var logger *zap.Logger
 
-type TestJob struct{}
-
-func (TestJob) Frequency() string {
-	return "* * * * * *" // Every second
+type TestJob struct {
+	entityId cron.EntryID
 }
 
-func (TestJob) Run() {
+func (j *TestJob) Frequency() string {
+	return "@every 5s" // Every second
+}
+
+func (j *TestJob) Run() {
 	log.Println("Test Crontab", time.Now().Unix())
+}
+
+func (j *TestJob) SetEntityId(entityId cron.EntryID) {
+	j.entityId = entityId
 }
 
 func TestCronJob(t *testing.T) {
 	CronManger, err := NewCronManage(Second, logger)
 	assert.Nil(t, err)
-	t1 := TestJob{}
-	_, err = CronManger.RegisterFunc(t1.Frequency(), t1.Run)
-	assert.Nil(t, err)
 
 	go CronManger.Start()
 	log.Println("Cron started success")
-	time.Sleep(10 * time.Second)
+	t1 := TestJob{}
+	_, err = CronManger.Register(&t1)
+	assert.Nil(t, err)
+	fmt.Print(t1.entityId)
+	time.Sleep(16 * time.Second)
+	CronManger.RemoveEntity(t1.entityId)
+	time.Sleep(30 * time.Second)
 }
 
 func init() {
