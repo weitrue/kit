@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"github.com/ethereum/go-ethereum/rpc"
 	"math/big"
 	"time"
 
@@ -13,9 +12,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
-func Withdraw(ctx context.Context, c *rpc.Client, from, to string) error {
+func Withdraw(ctx context.Context, c *rpc.Client, from, to, privateKeyHex string) error {
 	client := ethclient.NewClient(c)
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
@@ -48,7 +48,7 @@ func Withdraw(ctx context.Context, c *rpc.Client, from, to string) error {
 		return err
 	}
 
-	tx, err = signTransaction(tx, "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf", chainID)
+	tx, err = signTransaction(tx, privateKeyHex, chainID)
 	if err != nil {
 		return err
 	}
@@ -113,12 +113,6 @@ func signTransaction(tx *types.Transaction, privateKeyHex string, chainID *big.I
 		return nil, err
 	}
 
-	//publicKey := privateKey.Public()
-	//publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	//if !ok {
-	//}
-	//fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
-
 	return types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 }
 
@@ -155,7 +149,7 @@ func getBaseFee(ctx context.Context, client *ethclient.Client, from, to common.A
 	return baseFee, nil
 }
 
-func decodePreSignTransaction(ctx context.Context, preSign string) (*types.Transaction, error) {
+func decodePreSignTransaction(preSign string) (*types.Transaction, error) {
 	tx := new(types.Transaction)
 	decodeBytes, err := hex.DecodeString(preSign[2:])
 	if err != nil {

@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"context"
 	"crypto"
 	"encoding/hex"
 	"fmt"
+	"github.com/ethereum/go-ethereum/rpc"
 	"reflect"
 	"testing"
 
@@ -50,10 +52,42 @@ func TestName(t *testing.T) {
 
 	fmt.Println(sender.Hex())
 	md5 := crypto.MD5.New()
-	md5.Write([]byte("raymond@blocksec.com"))
+	md5.Write([]byte("Ruby@blocksec.com"))
 	fmt.Println(hex.EncodeToString(md5.Sum(nil)))
 
 	fmt.Println(len("bc1pc72wfxt28739kr0pa64nde09rzgwe8sw792nmxgu3pxwdfj8yymqmmhjl3"))
 	fmt.Println(len("NativeLoader1111111111111111111111111111111"))
 
+}
+
+func TestGetBalance(t *testing.T) {
+	type args struct {
+		ctx     context.Context
+		c       *rpc.Client
+		address string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr error
+	}{
+		{
+			name: "test",
+			args: args{
+				ctx:     context.Background(),
+				c:       MerlinClient,
+				address: "0x94661b622425271e8ce9cea52214bed9b9f18861",
+			},
+			want:    "0x0",
+			wantErr: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetBalance(tt.args.ctx, tt.args.c, tt.args.address)
+			assert.Nil(t, err)
+			fmt.Println(got)
+		})
+	}
 }

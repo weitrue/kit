@@ -69,7 +69,7 @@ func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method
 	return out[0], nil
 }
 
-func CallWithInput(ctx context.Context, c *rpc.Client, contract, methodName string, abiO *abi.ABI, args ...any) (any, error) {
+func CallWithInput(ctx context.Context, c *rpc.Client, contract, methodName string, abiO *abi.ABI, args ...any) ([]any, error) {
 	to := common.HexToAddress(contract)
 	if len(args) == 0 {
 		return nil, errors.New("invalid input")
@@ -97,7 +97,7 @@ func CallWithInput(ctx context.Context, c *rpc.Client, contract, methodName stri
 		return nil, err
 	}
 
-	return out[0], nil
+	return out, nil
 }
 
 func CodeAt(ctx context.Context, c *rpc.Client, contract string) (string, error) {

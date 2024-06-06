@@ -19,10 +19,11 @@ import (
 
 func TestWithdraw(t *testing.T) {
 	type args struct {
-		ctx  context.Context
-		c    *rpc.Client
-		from string
-		to   string
+		ctx        context.Context
+		c          *rpc.Client
+		from       string
+		to         string
+		privateKey string
 	}
 	tests := []struct {
 		name string
@@ -31,16 +32,17 @@ func TestWithdraw(t *testing.T) {
 		{
 			name: "",
 			args: args{
-				ctx:  context.Background(),
-				c:    ETHClient,
-				from: "0xba46dd807DD7A5bBe2eE80b6D0516A088223C574",
-				to:   "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
+				ctx:        context.Background(),
+				c:          ETHClient,
+				from:       "0xba46dd807DD7A5bBe2eE80b6D0516A088223C574",
+				to:         "0xEF87e7024Fe8f2D35fA8Be569a3c788722b2905f",
+				privateKey: "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Withdraw(tt.args.ctx, tt.args.c, tt.args.from, tt.args.to)
+			err := Withdraw(tt.args.ctx, tt.args.c, tt.args.from, tt.args.to, tt.args.privateKey)
 			assert.Nil(t, err)
 		})
 	}
@@ -199,7 +201,7 @@ func Test_decodeTransactionByPreSign(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tx, err := decodePreSignTransaction(tt.args.ctx, tt.args.callData)
+			tx, err := decodePreSignTransaction(tt.args.callData)
 			assert.Nil(t, err)
 			fmt.Println(tx.Nonce(), tx.ChainId().String())
 			signer := types.LatestSignerForChainID(tx.ChainId())

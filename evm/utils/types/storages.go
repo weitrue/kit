@@ -2,13 +2,7 @@ package types
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
-)
-
-var (
-	ErrSize               = errors.New("data size err")
-	ErrUnsupportedStorage = errors.New("unsupported storage")
 )
 
 type Storage struct {

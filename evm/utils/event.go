@@ -27,11 +27,7 @@ func SubscribeContractEvents(ctx context.Context, client *ethclient.Client, cont
 	}
 
 	for _, v := range logs {
-		for idx, vv := range v.Topics {
-			if idx > 0 {
-				fmt.Println(common.BytesToAddress(vv.Big().Bytes()))
-			}
-		}
+		fmt.Println(common.Bytes2Hex(v.Data[:32]))
 	}
 
 	return nil

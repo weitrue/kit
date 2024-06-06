@@ -1,7 +1,11 @@
 package utils
 
 import (
+	"context"
 	"encoding/hex"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/shopspring/decimal"
 	"reflect"
 	"regexp"
 
@@ -10,7 +14,8 @@ import (
 )
 
 const (
-	zeroAddress = "0x0000000000000000000000000000000000000000"
+	zeroAddress         = "0x0000000000000000000000000000000000000000"
+	NativeTokenDecimals = 18
 )
 
 // PublicKeyBytesToAddress zero address return if key is invalid
@@ -30,7 +35,7 @@ func PublicKeyBytesToAddress(publicKey []byte) common.Address {
 }
 
 // IsValidAddress validate hex address
-func IsValidAddress(addr interface{}) bool {
+func IsValidAddress(addr any) bool {
 	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
 	switch v := addr.(type) {
 	case string:
@@ -43,7 +48,7 @@ func IsValidAddress(addr interface{}) bool {
 }
 
 // IsZeroAddress validate if it's a 0 address
-func IsZeroAddress(addr interface{}) bool {
+func IsZeroAddress(addr any) bool {
 	var address common.Address
 	switch v := addr.(type) {
 	case string:
@@ -57,4 +62,14 @@ func IsZeroAddress(addr interface{}) bool {
 	zeroAddressBytes := common.FromHex(zeroAddress)
 	addressBytes := address.Bytes()
 	return reflect.DeepEqual(addressBytes, zeroAddressBytes)
+}
+
+func GetBalance(ctx context.Context, c *rpc.Client, address string) (string, error) {
+	client := ethclient.NewClient(c)
+	balanceAt, err := client.BalanceAt(ctx, common.HexToAddress(address), nil)
+	if err != nil {
+		return "", err
+	}
+
+	return decimal.NewFromBigInt(balanceAt, -NativeTokenDecimals).String(), nil
 }
