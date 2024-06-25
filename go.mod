@@ -5,7 +5,7 @@ go 1.21
 require (
 	cloud.google.com/go/vertexai v0.9.0
 	github.com/buger/jsonparser v1.1.1
-	github.com/ethereum/go-ethereum v1.13.14
+	github.com/ethereum/go-ethereum v1.13.15
 	github.com/gocolly/colly/v2 v2.1.0
 	github.com/pelletier/go-toml/v2 v2.1.0
 	github.com/pkg/errors v0.9.1
