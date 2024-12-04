@@ -83,11 +83,20 @@ func TestCreateTransaction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
-			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf", big.NewInt(1))
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
+			transaction, err = SignTransaction(transaction, "c29fc418e770e259ebd5e02e6393191898415eabffc5be64cfeaa47c1bddeeaf", big.NewInt(1))
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			bytes, err := transaction.MarshalBinary()
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println(hexutil.Encode(bytes))
 		})
 	}
@@ -146,11 +155,20 @@ func TestSignTransaction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := CreateTransaction(tt.args.ctx, tt.args.client, tt.args.sender, tt.args.to, tt.args.value, tt.args.gas, tt.args.gasLimit, tt.args.input)
-			assert.Nil(t, err)
-			transaction, err = signTransaction(transaction, tt.args.privateKey, tt.args.chainId)
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
+			transaction, err = SignTransaction(transaction, tt.args.privateKey, tt.args.chainId)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			bytes, err := transaction.MarshalBinary()
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println("pre sign")
 			fmt.Println(hexutil.Encode(bytes))
 
@@ -161,13 +179,19 @@ func TestSignTransaction(t *testing.T) {
 				return
 			}
 
-			signer := types.NewEIP155Signer(transaction.ChainId())
+			signer := types.NewLondonSigner(transaction.ChainId())
 			sender, err := signer.Sender(transaction)
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println("sender")
 			fmt.Println(sender.String())
 			baseFee, err := getBaseFee(tt.args.ctx, tt.args.client, sender, *transaction.To(), gasPrice, transaction.Data())
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println("Fee")
 			fmt.Println(ToDecimal(baseFee, 18).String())
 			fmt.Println(ToDecimal(new(big.Int).Mul(new(big.Int).SetUint64(transaction.Gas()), transaction.GasPrice()), 18).String())
@@ -184,29 +208,42 @@ func Test_decodeTransactionByPreSign(t *testing.T) {
 		name string
 		args args
 	}{
+		//{
+		//	name: "",
+		//	args: args{
+		//		ctx:      context.Background(),
+		//		callData: "0xf8650484b2d05e00825208943d497994fff1d1ace609b83b8ac440b5d6f04cf603808220f3a0f987a52e0241e525e3e52ade0553cc9232c7e3033225ba93b3eced81df6e62e5a058e5b5bccf724c1622f87c5e7e8e499cd63b970c1ddbb7ce5f6bed67679b3aec",
+		//	},
+		//},
+		//{
+		//	name: "manta",
+		//	args: args{
+		//		ctx:      context.Background(),
+		//		callData: "0xf866808501de9027e8825208946b65dd3537af63a285e0a008ecbcbe725ccb8fd28080820175a080b8076c2d40b89983c232ac00565d8f3c79e25049bca6ddb6ceddd1ead4567fa0798669d54d8bc0d5810dde0c4ba756bf12f94bc396d534c8335ecc619387c759",
+		//	},
+		//},
 		{
-			name: "",
+			name: "bsc",
 			args: args{
 				ctx:      context.Background(),
-				callData: "0xf8650484b2d05e00825208943d497994fff1d1ace609b83b8ac440b5d6f04cf603808220f3a0f987a52e0241e525e3e52ade0553cc9232c7e3033225ba93b3eced81df6e62e5a058e5b5bccf724c1622f87c5e7e8e499cd63b970c1ddbb7ce5f6bed67679b3aec",
-			},
-		},
-		{
-			name: "manta",
-			args: args{
-				ctx:      context.Background(),
-				callData: "0xf866808501de9027e8825208946b65dd3537af63a285e0a008ecbcbe725ccb8fd28080820175a080b8076c2d40b89983c232ac00565d8f3c79e25049bca6ddb6ceddd1ead4567fa0798669d54d8bc0d5810dde0c4ba756bf12f94bc396d534c8335ecc619387c759",
+				callData: "0x410cc3a300000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000002400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ae50fbca863fc28d9b5833e38ddb040d507583fd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000014401d5062a00000000000000000000000095bdb13cc363998f3adec92985bab00e1b62531a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004418c882a50000000000000000000000007089324d008db4a49a676c224f6aec5b15a5e8d7000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ae50fbca863fc28d9b5833e38ddb040d507583fd000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000124134008d300000000000000000000000095bdb13cc363998f3adec92985bab00e1b62531a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004418c882a50000000000000000000000007089324d008db4a49a676c224f6aec5b15a5e8d700000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tx, err := decodePreSignTransaction(tt.args.callData)
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println(tx.Nonce(), tx.ChainId().String())
 			signer := types.LatestSignerForChainID(tx.ChainId())
 			sender, err := signer.Sender(tx)
-			assert.Nil(t, err)
+			if !assert.Nil(t, err) {
+				t.Log(err)
+				return
+			}
 			fmt.Println(sender.String())
 		})
 	}

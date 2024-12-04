@@ -10,8 +10,14 @@ import (
 func ToDecimal(val any, decimals int) decimal.Decimal {
 	value := new(big.Int)
 	switch v := val.(type) {
+	case int64:
+		value.SetInt64(v)
+	case uint64:
+		value.SetUint64(v)
 	case string:
 		value.SetString(v, 10)
+	case decimal.Decimal:
+		value = v.BigInt()
 	case *big.Int:
 		value = v
 	}

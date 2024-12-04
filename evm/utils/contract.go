@@ -38,6 +38,18 @@ func calculateSelector(selector string) []byte {
 	return hash.Sum(nil)[:4]
 }
 
+func calculateMethodSelector(m abi.Method) []byte {
+	//function foo(uint32 a, int b)    =    "foo(uint32,int256)"
+	types := make([]string, len(m.Inputs))
+	for i, v := range m.Inputs {
+		types[i] = v.Type.String()
+	}
+	functionStr := fmt.Sprintf("%v(%v)", m.Name, strings.Join(types, ","))
+	keccak := sha3.NewLegacyKeccak256()
+	keccak.Write([]byte(functionStr))
+	return keccak.Sum(nil)[:4]
+}
+
 func DecodeABI(abiStr string) (*abi.ABI, error) {
 	contractAbi, err := abi.JSON(strings.NewReader(abiStr))
 	if err != nil {

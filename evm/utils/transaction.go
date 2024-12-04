@@ -48,7 +48,7 @@ func Withdraw(ctx context.Context, c *rpc.Client, from, to, privateKeyHex string
 		return err
 	}
 
-	tx, err = signTransaction(tx, privateKeyHex, chainID)
+	tx, err = SignTransaction(tx, privateKeyHex, chainID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func CreateTransaction(ctx context.Context, client *ethclient.Client, sender, to
 	}), nil
 }
 
-func signTransaction(tx *types.Transaction, privateKeyHex string, chainID *big.Int) (*types.Transaction, error) {
+func SignTransaction(tx *types.Transaction, privateKeyHex string, chainID *big.Int) (*types.Transaction, error) {
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return nil, err
@@ -150,13 +150,9 @@ func getBaseFee(ctx context.Context, client *ethclient.Client, from, to common.A
 }
 
 func decodePreSignTransaction(preSign string) (*types.Transaction, error) {
+	rawTxBytes := RemoveZeroHex(preSign)
 	tx := new(types.Transaction)
-	decodeBytes, err := hex.DecodeString(preSign[2:])
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.UnmarshalBinary(decodeBytes)
+	err := tx.UnmarshalBinary(rawTxBytes)
 	if err != nil {
 		return nil, err
 	}
