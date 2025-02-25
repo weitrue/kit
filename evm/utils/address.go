@@ -73,3 +73,13 @@ func GetBalance(ctx context.Context, c *rpc.Client, address string) (string, err
 
 	return decimal.NewFromBigInt(balanceAt, -NativeTokenDecimals).String(), nil
 }
+
+func GetBalanceWithDecimals(ctx context.Context, c *rpc.Client, address string) (decimal.Decimal, error) {
+	client := ethclient.NewClient(c)
+	balanceAt, err := client.BalanceAt(ctx, common.HexToAddress(address), nil)
+	if err != nil {
+		return decimal.Zero, err
+	}
+
+	return decimal.NewFromBigInt(balanceAt, 0), nil
+}
