@@ -19,6 +19,10 @@ const (
 	nft721InterfaceId          = ""
 )
 
+var (
+	ErrNoData = errors.New("no data")
+)
+
 // IsERC721 supportsInterface(0x80ac58cd)是否返回true
 func IsERC721() {
 
@@ -73,6 +77,10 @@ func Call(ctx context.Context, c *rpc.Client, contract string, method abi.Method
 		return nil, err
 	}
 
+	if len(result) == 0 {
+		return nil, ErrNoData
+	}
+
 	out, err := method.Outputs.Unpack(result)
 	if err != nil {
 		return nil, err
@@ -102,6 +110,10 @@ func CallWithInput(ctx context.Context, c *rpc.Client, contract, methodName stri
 	result, err := client.CallContract(ctx, *callData, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(result) == 0 {
+		return nil, ErrNoData
 	}
 
 	out, err := method.Outputs.Unpack(result)
