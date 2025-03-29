@@ -18,14 +18,15 @@ func TestToDecimal(t *testing.T) {
 		{
 			name: "test1",
 			args: args{
-				val:      decimal.NewFromFloat(1000000000000000000),
+				val:      decimal.Zero,
 				decimals: 18,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fmt.Println(ToDecimal(tt.args.val, tt.args.decimals))
+			val, _ := decimal.NewFromString("173383212446124014651")
+			fmt.Println(ToDecimal(val, tt.args.decimals))
 		})
 	}
 }

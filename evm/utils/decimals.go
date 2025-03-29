@@ -22,9 +22,9 @@ func ToDecimal(val any, decimals int) decimal.Decimal {
 		value = v
 	}
 
-	mul := decimal.NewFromFloat(float64(10)).Pow(decimal.NewFromFloat(float64(decimals)))
-	num, _ := decimal.NewFromString(value.String())
-	result := num.Div(mul)
+	mul := decimal.New(1, int32(decimals))
+	num := decimal.RequireFromString(value.String())
+	result := num.DivRound(mul, int32(decimals))
 
 	return result
 }
