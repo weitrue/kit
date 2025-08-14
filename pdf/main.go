@@ -2,10 +2,15 @@ package main
 
 import (
 	"fmt"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"log"
 	"os"
 	"time"
 
 	"github.com/jung-kurt/gofpdf"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	pdf "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
 // ========== 数据结构（按 HKMA STR 常见栏目分组） ==========
@@ -346,7 +351,7 @@ func main1() {
 	}
 }
 
-func main() {
+func main2() {
 	report := STRReport{
 		CaseRef:    "STR-2025-0001",
 		ReportDate: time.Now(),
@@ -422,3 +427,202 @@ func main() {
 	}
 	fmt.Println("PDF generated:", out)
 }
+
+// Example of filling PDF formdata with a form.
+
+// fillFields loads field data from `jsonPath` and used to fill in form data in `inputPath` and outputs
+// as PDF in `outputPath`. The output PDF form is flattened.
+
+func main() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/STR_form.pdf"
+	//out := "data.pdf"
+	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
+
+	conf := pdf.NewDefaultConfiguration()
+	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
+	conf.Cmd = pdf.VALIDATE
+
+	f, err := os.Open(in)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ctx, err := api.ReadContext(f, conf)
+	if err != nil {
+		log.Fatalf("ReadContextFile error: %v", err)
+	}
+
+	rootDict, err := ctx.XRefTable.Catalog()
+	if err != nil {
+		log.Fatalf("catalog error: %v", err)
+	}
+
+	pagesRef := rootDict.IndirectRefEntry("Pages")
+	if pagesRef == nil {
+		log.Fatalf("Root 没有 /Pages")
+	}
+	fmt.Println(pagesRef)
+
+	d, err := ctx.DereferenceDict(*pagesRef)
+	if err != nil || d == nil {
+		return
+	}
+
+	kids := d.ArrayEntry("Kids")
+	arr, err := ctx.DereferenceArray(kids)
+	if err != nil {
+		return
+	}
+
+	fmt.Println(arr)
+
+}
+
+// 递归展开页树，收集所有 Page 的字典
+func collectPages(ctx *pdf.Context, node types.Object, out *[]types.Dict) error {
+	d, err := ctx.DereferenceDict(node) // node 可为 Dict 或 IndirectRef(值)
+	if err != nil || d == nil {
+		return fmt.Errorf("Dereference 页树节点失败: %v", err)
+	}
+	if t := d.NameEntry("Type"); t != nil && *t == "Page" {
+		*out = append(*out, d)
+		return nil
+	}
+	// Pages 节点：下探 Kids
+	kids := d.ArrayEntry("Kids")
+	arr, err := ctx.DereferenceArray(kids)
+	if err != nil {
+		return fmt.Errorf("Dereference Kids 失败: %v", err)
+	}
+	for _, k := range arr {
+		if err := collectPages(ctx, k, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func form1() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.pdf"
+	//out := "data.pdf"
+	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
+
+	conf := pdf.NewDefaultConfiguration()
+	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
+	conf.Cmd = pdf.VALIDATE
+
+	f, err := os.Open(in)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ctx, err := api.ReadContext(f, conf)
+	if err != nil {
+		log.Fatalf("ReadContextFile error: %v", err)
+	}
+
+	rootDict, err := ctx.XRefTable.Catalog()
+	if err != nil {
+		log.Fatalf("catalog error: %v", err)
+	}
+
+	// 2. 找 AcroForm
+	acroFormRef := rootDict["AcroForm"]
+	if acroFormRef == nil {
+		log.Fatalf("没有找到 AcroForm")
+	}
+
+	acroFormDict, err := ctx.DereferenceDict(acroFormRef)
+	if err != nil {
+		log.Fatalf("Dereference AcroForm error: %v", err)
+	}
+
+	// 3. 找 Fields 数组
+	fields := acroFormDict.ArrayEntry("Fields")
+	if fields == nil {
+		log.Fatalf("AcroForm 没有 Fields")
+	}
+
+	arr, err := ctx.DereferenceArray(fields)
+	if err != nil {
+		log.Fatalf("DereferenceArray error: %v", err)
+	}
+
+	fmt.Println("AcroForm 字段列表：")
+	for _, f := range arr {
+		processField(ctx, f)
+	}
+}
+
+func processField(ctx *pdf.Context, obj types.Object) {
+	dict, err := ctx.DereferenceDict(obj)
+	if err != nil {
+		log.Printf("Dereference field error: %v", err)
+		return
+	}
+	if dict == nil {
+		return
+	}
+
+	// 取字段名
+	if t := dict.StringEntry("T"); t != nil {
+		fmt.Printf("字段名: %s\n", *t)
+	}
+
+	// 取字段值
+	if v := dict.StringEntry("V"); v != nil {
+		fmt.Printf("  字段值: %s\n", *v)
+	}
+
+	// 有子字段（Kids）
+	if kids := dict.ArrayEntry("Kids"); kids != nil {
+		arr, _ := ctx.DereferenceArray(kids)
+		for _, kid := range arr {
+			processField(ctx, kid)
+		}
+	}
+}
+
+func ReadField() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.pdf"
+	//out := "data.pdf"
+	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
+
+	conf := pdf.NewDefaultConfiguration()
+	f0, err := os.Open(in)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	data, err := api.FormFields(f0, conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, field := range data {
+		fmt.Println(field.ID, field.Name, field.V, field.AltName)
+	}
+}
+
+//// 获取PDF所有表单字段
+//func getFormFields(inputPath string) ([]*form.Field, error) {
+//	// 加载PDF文件
+//	f, err := os.Open(inputPath)
+//	if err != nil {
+//		return nil, fmt.Errorf("无法打开PDF文件: %v", err)
+//	}
+//	defer f.Close()
+//
+//	// 解析PDF
+//	ctx, err := api.ReadContext(f, pdf.NewDefaultConfiguration())
+//	if err != nil {
+//		return nil, fmt.Errorf("PDF解析失败: %v", err)
+//	}
+//
+//	// 获取AcroForm（交互式表单）
+//	if ctx.Form == nil {
+//		return nil, fmt.Errorf("该PDF没有交互式表单字段")
+//	}
+//
+//	return ctx.Fields, nil
+//}
