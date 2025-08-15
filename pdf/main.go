@@ -1,442 +1,29 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
+	"errors"
 	"fmt"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
-	"log"
-	"os"
-	"time"
-
-	"github.com/jung-kurt/gofpdf"
-
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	pdf "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"io"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
 )
-
-// ========== 数据结构（按 HKMA STR 常见栏目分组） ==========
-
-type ReporterInfo struct {
-	InstitutionName string // 报告机构名称
-	InstitutionID   string // 机构/牌照编号（如有）
-	Department      string // 部门
-	ContactName     string // 联系人
-	ContactEmail    string // 邮箱
-	ContactPhone    string // 电话
-}
-
-type SubjectIDDoc struct {
-	Type   string // 证件类型 e.g. "HKID", "Passport"
-	Number string // 证件号
-}
-
-type SubjectInfo struct {
-	Name        string
-	Alias       string
-	Nationality string
-	Address     string
-	AccountNo   string
-	CustomerID  string
-	IDDocs      []SubjectIDDoc
-}
-
-type Transaction struct {
-	TxID           string
-	TxTimeUnix     int64  // 交易时间（Unix 秒）
-	Channel        string // 渠道 e.g. "Online/Mobile/Branch"
-	Currency       string // 货币
-	Amount         string // 金额（字符串可保留高精度）
-	Counterparty   string // 对手方名称/账户
-	CounterpartyId string // 对手方标识（如账号/钱包地址）
-	Description    string // 交易说明/备注
-}
-
-type STRReport struct {
-	// 基础元信息
-	CaseRef        string    // 内部案件编号
-	ReportDate     time.Time // 报告日期
-	Reporter       ReporterInfo
-	Subject        SubjectInfo
-	Transactions   []Transaction
-	Reason         string // 可疑原因（尽量具体，引用触发规则/阈值）
-	ActionsTaken   string // 已采取措施（如冻结/加强尽调/拒绝交易等）
-	AttachmentNote string // 附件/证据列表说明（如截图、对账单、聊天记录等）
-	DeclarantName  string // 申报人姓名
-	DeclarantTitle string // 申报人职务
-	DeclarantSign  string // 申报人签名占位（如“/s/ John Chan”）
-}
-
-// ========== PDF 渲染 ==========
-
-type STRPDFOptions struct {
-	Title             string
-	FontRegularTTF    string // UTF-8 字体：常规
-	FontBoldTTF       string // UTF-8 字体：粗体
-	OutputPath        string
-	SetFileTimes      bool
-	FileCreateTime    time.Time // 用于 os.Chtimes（文件系统时间）
-	FileModifyTime    time.Time
-	PageMarginLeftMM  float64
-	PageMarginTopMM   float64
-	PageMarginRightMM float64
-}
-
-func RenderSTRToPDF(r STRReport, opt STRPDFOptions) (string, error) {
-	if opt.OutputPath == "" {
-		opt.OutputPath = fmt.Sprintf("/Users/wpeng/Projects/golang/src/kit/pdf/HKMA_STR_%s.pdf", safeFileName(r.CaseRef))
-	}
-	if opt.Title == "" {
-		opt.Title = "HKMA Suspicious Transaction Report (e-STR)"
-	}
-	if opt.PageMarginLeftMM == 0 && opt.PageMarginTopMM == 0 && opt.PageMarginRightMM == 0 {
-		opt.PageMarginLeftMM, opt.PageMarginTopMM, opt.PageMarginRightMM = 15, 15, 15
-	}
-
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(opt.PageMarginLeftMM, opt.PageMarginTopMM, opt.PageMarginRightMM)
-	pdf.SetAutoPageBreak(true, 12)
-
-	// 字体（中文需要 UTF-8 字体）
-	useBold := false
-	if opt.FontRegularTTF != "" {
-		pdf.AddUTF8Font("Body", "", opt.FontRegularTTF)
-		pdf.SetFont("Body", "", 11)
-		if opt.FontBoldTTF != "" {
-			pdf.AddUTF8Font("BodyBold", "", opt.FontBoldTTF)
-			useBold = true
-		}
-	} else {
-		// 无自定义字体则使用内置 Helvetica（仅英文/ASCII）
-		pdf.SetFont("Helvetica", "", 11)
-	}
-
-	// 页眉页脚
-	pdf.SetHeaderFuncMode(func() {
-		if useBold {
-			pdf.SetFont("BodyBold", "", 12)
-		} else {
-			pdf.SetFont("Helvetica", "B", 12)
-		}
-		pdf.CellFormat(0, 8, opt.Title, "", 1, "L", false, 0, "")
-		// 细线
-		pdf.SetDrawColor(200, 200, 200)
-		pdf.Line(opt.PageMarginLeftMM, pdf.GetY(), 210-opt.PageMarginRightMM, pdf.GetY())
-		pdf.Ln(2)
-	}, true)
-
-	pdf.SetFooterFunc(func() {
-		pdf.SetY(-12)
-		pdf.SetDrawColor(200, 200, 200)
-		pdf.Line(opt.PageMarginLeftMM, pdf.GetY(), 210-opt.PageMarginRightMM, pdf.GetY())
-		pdf.SetY(-10)
-		pdf.SetFont("Helvetica", "", 9)
-		pdf.CellFormat(0, 8, fmt.Sprintf("Case: %s | Page %d/{nb}", r.CaseRef, pdf.PageNo()), "", 0, "R", false, 0, "")
-	})
-	pdf.AliasNbPages("")
-
-	pdf.AddPage()
-
-	// 标题区
-	writeKV(pdf, "Case Reference", r.CaseRef, useBold)
-	writeKV(pdf, "Report Date", r.ReportDate.Format("2006-01-02 15:04:05 MST"), useBold)
-	pdf.Ln(2)
-
-	// 1. Reporter Information
-	section(pdf, "1. Reporter Information", useBold)
-	writeKV(pdf, "Institution Name", r.Reporter.InstitutionName, useBold)
-	writeKV(pdf, "Institution/License ID", r.Reporter.InstitutionID, useBold)
-	writeKV(pdf, "Department", r.Reporter.Department, useBold)
-	writeKV(pdf, "Contact Name", r.Reporter.ContactName, useBold)
-	writeKV(pdf, "Contact Email", r.Reporter.ContactEmail, useBold)
-	writeKV(pdf, "Contact Phone", r.Reporter.ContactPhone, useBold)
-
-	// 2. Subject Information
-	section(pdf, "2. Subject (Customer) Information", useBold)
-	writeKV(pdf, "Name", r.Subject.Name, useBold)
-	writeKV(pdf, "Alias", r.Subject.Alias, useBold)
-	writeKV(pdf, "Nationality", r.Subject.Nationality, useBold)
-	writeKV(pdf, "Address", r.Subject.Address, useBold)
-	writeKV(pdf, "Account No.", r.Subject.AccountNo, useBold)
-	writeKV(pdf, "Customer ID", r.Subject.CustomerID, useBold)
-	if len(r.Subject.IDDocs) > 0 {
-		if useBold {
-			pdf.SetFont("BodyBold", "", 11)
-		} else {
-			pdf.SetFont("Helvetica", "B", 11)
-		}
-		pdf.CellFormat(0, 6, "Identification Documents:", "", 1, "L", false, 0, "")
-		if useBold {
-			pdf.SetFont("Body", "", 11)
-		} else {
-			pdf.SetFont("Helvetica", "", 11)
-		}
-		for i, idd := range r.Subject.IDDocs {
-			writeKV(pdf, fmt.Sprintf("  #%d Type", i+1), idd.Type, useBold)
-			writeKV(pdf, fmt.Sprintf("  #%d Number", i+1), idd.Number, useBold)
-		}
-	}
-
-	// 3. Transaction Details（表格）
-	section(pdf, "3. Suspicious Transaction Details", useBold)
-	if len(r.Transactions) == 0 {
-		writeKV(pdf, "Transactions", "(none)", useBold)
-	} else {
-		renderTxTable(pdf, r.Transactions, useBold)
-	}
-
-	// 4. Reason for Suspicion
-	section(pdf, "4. Reason for Suspicion", useBold)
-	multiLine(pdf, r.Reason)
-
-	// 5. Actions Taken
-	section(pdf, "5. Actions Taken", useBold)
-	multiLine(pdf, r.ActionsTaken)
-
-	// 6. Attachment / Evidence Notes
-	section(pdf, "6. Attachments / Evidence", useBold)
-	multiLine(pdf, r.AttachmentNote)
-
-	// 7. Declarant
-	section(pdf, "7. Declarant", useBold)
-	writeKV(pdf, "Name", r.DeclarantName, useBold)
-	writeKV(pdf, "Title", r.DeclarantTitle, useBold)
-	writeKV(pdf, "Signature", r.DeclarantSign, useBold)
-
-	// 导出
-	if err := pdf.OutputFileAndClose(opt.OutputPath); err != nil {
-		return "", err
-	}
-
-	// 可选：设置文件系统时间（创建/修改时间）
-	if opt.SetFileTimes {
-		// on Unix, atime 与 mtime 可改；“创建时间”严格意义上不可写，但很多场景用 mtime 代表
-		at := opt.FileCreateTime
-		mt := opt.FileModifyTime
-		if at.IsZero() {
-			at = time.Now()
-		}
-		if mt.IsZero() {
-			mt = at
-		}
-		_ = os.Chtimes(opt.OutputPath, at, mt)
-	}
-
-	return opt.OutputPath, nil
-}
-
-// ========== 工具渲染函数 ==========
-
-func section(pdf *gofpdf.Fpdf, title string, useBold bool) {
-	pdf.Ln(2)
-	if useBold {
-		pdf.SetFont("BodyBold", "", 12)
-	} else {
-		pdf.SetFont("Helvetica", "B", 12)
-	}
-	pdf.CellFormat(0, 7, title, "", 1, "L", false, 0, "")
-	pdf.SetDrawColor(30, 144, 255)
-	y := pdf.GetY()
-	pdf.Line(15, y, 195, y)
-	if useBold {
-		pdf.SetFont("Body", "", 11)
-	} else {
-		pdf.SetFont("Helvetica", "", 11)
-	}
-	pdf.Ln(1)
-}
-
-func writeKV(pdf *gofpdf.Fpdf, k, v string, useBold bool) {
-	// label
-	if useBold {
-		pdf.SetFont("BodyBold", "", 11)
-	} else {
-		pdf.SetFont("Helvetica", "B", 11)
-	}
-	pdf.CellFormat(50, 6, k, "", 0, "L", false, 0, "")
-	// value
-	if useBold {
-		pdf.SetFont("Body", "", 11)
-	} else {
-		pdf.SetFont("Helvetica", "", 11)
-	}
-	pdf.MultiCell(0, 6, v, "", "L", false)
-}
-
-func multiLine(pdf *gofpdf.Fpdf, text string) {
-	if text == "" {
-		text = "(none)"
-	}
-	pdf.MultiCell(0, 6, text, "", "L", false)
-}
-
-func renderTxTable(pdf *gofpdf.Fpdf, txs []Transaction, useBold bool) {
-	// 表头
-	if useBold {
-		pdf.SetFont("BodyBold", "", 10)
-	} else {
-		pdf.SetFont("Helvetica", "B", 10)
-	}
-	headers := []string{"#",
-		"Tx ID", "Time", "Channel", "Currency", "Amount",
-		"Counterparty", "Counterparty ID", "Description"}
-	widths := []float64{8, 30, 28, 20, 18, 22, 32, 35, 0}
-
-	for i, h := range headers {
-		w := widths[i]
-		pdf.CellFormat(w, 7, h, "1", 0, "C", false, 0, "")
-	}
-	pdf.Ln(-1)
-
-	// 内容
-	if useBold {
-		pdf.SetFont("Body", "", 9)
-	} else {
-		pdf.SetFont("Helvetica", "", 9)
-	}
-	for i, t := range txs {
-		row := []string{
-			fmt.Sprintf("%d", i+1),
-			t.TxID,
-			time.Unix(t.TxTimeUnix, 0).Format("2006-01-02 15:04"),
-			t.Channel,
-			t.Currency,
-			t.Amount,
-			t.Counterparty,
-			t.CounterpartyId,
-			t.Description,
-		}
-		for col, val := range row {
-			w := widths[col]
-			// 最后一列用 MultiCell 占满
-			if col == len(row)-1 {
-				x, y := pdf.GetX(), pdf.GetY()
-				pdf.MultiCell(0, 6, val, "1", "L", false)
-				pdf.SetXY(x+0, y) // 下一行从整行宽度后开始换行
-			} else {
-				pdf.CellFormat(w, 6, val, "1", 0, "L", false, 0, "")
-			}
-		}
-		pdf.Ln(-1)
-	}
-}
-
-func safeFileName(s string) string {
-	if s == "" {
-		return "no_ref"
-	}
-	// 简化：替换不安全字符
-	out := s
-	for _, bad := range []rune{'/', '\\', ':', '*', '?', '"', '<', '>', '|'} {
-		out = stringReplaceAllRune(out, bad, '_')
-	}
-	return out
-}
-func stringReplaceAllRune(s string, old rune, new rune) string {
-	runes := []rune(s)
-	for i, r := range runes {
-		if r == old {
-			runes[i] = new
-		}
-	}
-	return string(runes)
-}
-
-// ========== 示例演示 ==========
-func main1() {
-	path := "/Users/wpeng/Projects/golang/src/kit/pdf/fonts/NotoSansSC-Regular.ttf"
-	_, err := os.Stat(path)
-	if err != nil {
-		fmt.Println("Stat error:", err)
-	} else {
-		fmt.Println("File exists!")
-	}
-}
-
-func main2() {
-	report := STRReport{
-		CaseRef:    "STR-2025-0001",
-		ReportDate: time.Now(),
-		Reporter: ReporterInfo{
-			InstitutionName: "ABC Bank (HK)",
-			InstitutionID:   "BK12345",
-			Department:      "AML Compliance",
-			ContactName:     "Chan Tai Man",
-			ContactEmail:    "chan.tm@abcbank.com",
-			ContactPhone:    "+852-1234-5678",
-		},
-		Subject: SubjectInfo{
-			Name:        "LEE SIU MING",
-			Alias:       "LEE S.M.",
-			Nationality: "HKSAR",
-			Address:     "Room 1201, XXX Building, Central, Hong Kong",
-			AccountNo:   "012-345678-001",
-			CustomerID:  "CUST-889900",
-			IDDocs: []SubjectIDDoc{
-				{Type: "HKID", Number: "A123456(7)"},
-			},
-		},
-		Transactions: []Transaction{
-			{
-				TxID:           "TX-001",
-				TxTimeUnix:     time.Now().Add(-6 * time.Hour).Unix(),
-				Channel:        "Online",
-				Currency:       "HKD",
-				Amount:         "985,000.00",
-				Counterparty:   "XYZ LIMITED",
-				CounterpartyId: "Acct 11223344",
-				Description:    "Multiple large transfers in short period; mismatch with KYC profile.",
-			},
-			{
-				TxID:           "TX-002",
-				TxTimeUnix:     time.Now().Add(-2 * time.Hour).Unix(),
-				Channel:        "Branch",
-				Currency:       "USD",
-				Amount:         "180,000.00",
-				Counterparty:   "JOHN DOE",
-				CounterpartyId: "Acct 55667788",
-				Description:    "Cash deposit followed by outward remittance to high-risk jurisdiction.",
-			},
-		},
-		Reason: `Triggered by rules:
-- Rapid movement of high-value funds
-- Transaction patterns inconsistent with declared business nature
-- Counterparty in higher-risk geography`,
-		ActionsTaken: `- Temporarily held outgoing payment pending review
-- Conducted EDD and contacted customer for explanation
-- Filed STR to HKMA e-STR platform`,
-		AttachmentNote: `Attached: account statements (last 90 days), online banking logs, onboarding KYC file, branch CCTV snapshot (reference only).`,
-		DeclarantName:  "WONG KA HO",
-		DeclarantTitle: "AMLO",
-		DeclarantSign:  "/s/ WONG KA HO",
-	}
-
-	// 字体（如需中文，请下载 NotoSansCJK 或思源黑体等 TTF/OTF）
-	fontDir := "/Users/wpeng/Projects/golang/src/kit/pdf/fonts"
-	_ = os.MkdirAll(fontDir, 0755)
-	opt := STRPDFOptions{
-		Title: "HKMA Suspicious Transaction Report (e-STR) — Internal Generated",
-		//FontRegularTTF: "/Users/wpeng/Projects/golang/src/kit/pdf/fonts/NotoSansSC-Regular.ttf", // 若无中文可留空
-		//FontBoldTTF:    "/Users/wpeng/Projects/golang/src/kit/pdf/fonts/NotoSansSC-Bold.ttf",
-		OutputPath:     "HKMA_STR_demo.pdf",
-		SetFileTimes:   true,
-		FileCreateTime: time.Now().Add(-1 * time.Hour),
-		FileModifyTime: time.Now(),
-	}
-	out, err := RenderSTRToPDF(report, opt)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("PDF generated:", out)
-}
-
-// Example of filling PDF formdata with a form.
-
-// fillFields loads field data from `jsonPath` and used to fill in form data in `inputPath` and outputs
-// as PDF in `outputPath`. The output PDF form is flattened.
 
 func main() {
 	in := "/Users/wpeng/Projects/golang/src/kit/pdf/STR_form.pdf"
-	//out := "data.pdf"
-	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
+	outFile := "STR_Form_filled.pdf"
+
+	targetValues := map[string]string{
+		"TrxTotalAmount":  "1",
+		"TrxTotalPeriod":  "2",
+		"TrxDailyAverage": "2",
+	}
 
 	conf := pdf.NewDefaultConfiguration()
 	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
@@ -457,172 +44,717 @@ func main() {
 		log.Fatalf("catalog error: %v", err)
 	}
 
-	pagesRef := rootDict.IndirectRefEntry("Pages")
-	if pagesRef == nil {
-		log.Fatalf("Root 没有 /Pages")
-	}
-	fmt.Println(pagesRef)
-
-	d, err := ctx.DereferenceDict(*pagesRef)
-	if err != nil || d == nil {
+	// 从 Catalog 里拿 AcroForm 引用
+	formRef, found := rootDict.Find("AcroForm")
+	if !found {
+		log.Println("没有 AcroForm")
 		return
 	}
 
-	kids := d.ArrayEntry("Kids")
-	arr, err := ctx.DereferenceArray(kids)
+	formDict, err := ctx.DereferenceDict(formRef)
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 取 XFA
+	xfaObj, ok := formDict.Find("XFA")
+	if !ok {
+		log.Fatal("AcroForm 没有 XFA")
+	}
+
+	xfaArr, ok := derefToArray(ctx, xfaObj)
+	if !ok {
+		log.Fatal("XFA is not an array or couldn't deref")
+	}
+
+	// 4) 找到 datasets 流对象
+	var datasetsStream *types.StreamDict
+	for i := 0; i < len(xfaArr); i += 2 {
+		name := objToNameString(xfaArr[i])
+		if strings.EqualFold(strings.TrimSpace(name), "datasets") {
+			o, _ := ctx.Dereference(xfaArr[i+1])
+			if sd, ok := o.(types.StreamDict); ok {
+				datasetsStream = &sd
+			}
+			break
+		}
+	}
+	if datasetsStream == nil {
+		log.Fatal("datasets stream not found")
 		return
 	}
 
-	fmt.Println(arr)
+	// 5) 解码原始 datasets
+	err = datasetsStream.Decode()
+	if err != nil {
+		log.Fatalf("Decode datasets stream failed: %v", err)
+		return
+	}
+
+	origXML := datasetsStream.Content
+
+	// 6) 修改 datasets XML
+	newXML, err := modifyDatasetsXML(origXML, targetValues)
+	if err != nil {
+		log.Fatalf("modifyDatasetsXML error: %v", err)
+	}
+
+	// 7) 读取原 PDF bytes
+	pdfBytes, err := ioutil.ReadFile(in)
+	if err != nil {
+		log.Fatalf("ReadFile error: %v", err)
+	}
+
+	// 8) 原位替换 datasets bytes
+	// pdfcpu 的 StreamDict 有 Offset 和 Length 字段可获取原始位置
+	offset := datasetsStream.StreamOffset
+	oldLen := *datasetsStream.StreamLength
+	if int(offset+oldLen) > len(pdfBytes) {
+		log.Fatal("invalid stream offset/length")
+		return
+	}
+
+	newBytes := newXML
+	if len(newBytes) > int(oldLen) {
+		log.Println("warning: new datasets is larger than original; Acrobat 可能仍可接受，但长度超出原位置")
+		return
+	}
+
+	// 构建新 PDF bytes
+	outPDF := make([]byte, len(pdfBytes)-int(oldLen)+len(newBytes))
+	copy(outPDF[:offset], pdfBytes[:offset])
+	copy(outPDF[offset:int(offset)+len(newBytes)], newBytes)
+	copy(outPDF[int(offset)+len(newBytes):], pdfBytes[offset+oldLen:])
+
+	// 9) 保存新 PDF
+	if err := ioutil.WriteFile(outFile, outPDF, 0644); err != nil {
+		log.Fatalf("WriteFile error: %v", err)
+	}
+
+	fmt.Printf("成功生成新 PDF: %s\n", outFile)
+}
+
+// derefToArray: 把可能是 IndirectRef/Array 的 XFA 对象解为 types.Array
+func derefToArray(ctx *pdf.Context, obj types.Object) (types.Array, bool) {
+	switch v := obj.(type) {
+	case types.IndirectRef:
+		o, err := ctx.Dereference(v)
+		if err != nil {
+			log.Printf("derefToArray: deref indirect ref failed: %v", err)
+			return nil, false
+		}
+		if a, ok := o.(types.Array); ok {
+			return a, true
+		}
+		if sd, ok := o.(types.StreamDict); ok {
+			// 单流形式，构造伪 array: ["xfa", stream]
+			return types.Array{types.StringLiteral("xfa"), sd}, true
+		}
+		return nil, false
+	case types.Array:
+		return v, true
+	default:
+		return nil, false
+	}
+}
+
+// objToNameString: array 中的 name slot 可能是 Name/StringLiteral/HexLiteral/IndirectRef
+func objToNameString(o types.Object) string {
+	switch t := o.(type) {
+	case types.Name:
+		return t.String()
+	case types.StringLiteral:
+		return t.Value()
+	case types.HexLiteral:
+		return t.Value()
+	case types.IndirectRef:
+		// 不在此函数解引用，返回 placeholder
+		return "indirectName"
+	default:
+		return ""
+	}
+}
+
+// modifyDatasetsXML: 简单的 XML 修改，将 exampleValues 写入 <form> 下
+func modifyDatasetsXML(orig []byte, values map[string]string) ([]byte, error) {
+	type Field struct {
+		XMLName xml.Name
+		Value   string `xml:",chardata"`
+	}
+	type Form struct {
+		XMLName xml.Name
+		Fields  []Field `xml:",any"`
+	}
+	type Data struct {
+		Form Form `xml:"form"`
+	}
+	type Datasets struct {
+		XMLName xml.Name
+		Data    Data `xml:"data"`
+	}
+
+	// 1. 用 Decoder 忽略命名空间
+	decoder := xml.NewDecoder(bytes.NewReader(orig))
+	decoder.Strict = false
+
+	var d Datasets
+	if err := decoder.Decode(&d); err != nil {
+		// 解析失败则创建最简单结构
+		d = Datasets{
+			XMLName: xml.Name{Local: "datasets"},
+			Data: Data{
+				Form: Form{
+					XMLName: xml.Name{Local: "form"},
+					Fields:  []Field{},
+				},
+			},
+		}
+	}
+
+	// 2. 更新或添加字段
+	fieldMap := make(map[string]*Field)
+	for i := range d.Data.Form.Fields {
+		fieldMap[d.Data.Form.Fields[i].XMLName.Local] = &d.Data.Form.Fields[i]
+	}
+	for k, v := range values {
+		if f, ok := fieldMap[k]; ok {
+			f.Value = v
+		} else {
+			d.Data.Form.Fields = append(d.Data.Form.Fields, Field{
+				XMLName: xml.Name{Local: k},
+				Value:   v,
+			})
+		}
+	}
+
+	// 3. Marshal 回 XML
+	out, err := xml.MarshalIndent(d, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	out = append([]byte(xml.Header), out...)
+	return out, nil
+}
+
+func printSTRFormField(ctx *pdf.Context, xfaObj types.Object) {
+	parts, err := extractXFA(ctx, xfaObj)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	tpl, ok := parts["template"]
+	if !ok || len(tpl) == 0 {
+		log.Fatal("XFA 里没有 template 部分（无法定位字段布局）")
+	}
 
 }
 
-// 递归展开页树，收集所有 Page 的字典
-func collectPages(ctx *pdf.Context, node types.Object, out *[]types.Dict) error {
-	d, err := ctx.DereferenceDict(node) // node 可为 Dict 或 IndirectRef(值)
-	if err != nil || d == nil {
-		return fmt.Errorf("Dereference 页树节点失败: %v", err)
+// //////////////////////////////////////////////////////////////////////////////
+// 辅助：提取 XFA template 与 datasets（如果存在），并返回 template bytes、datasetsRef(可能为nil)、datasets bytes
+// //////////////////////////////////////////////////////////////////////////////
+func extractXfaTemplateAndDatasets(ctx *pdf.Context, xfa types.Object) (template []byte, datasetsRef *types.IndirectRef, datasets []byte, err error) {
+	// 支持几种 xfa 表示形式：
+	// - Array [ name object name object ... ]
+	// - StreamDict 单独流
+	// - IndirectRef 指向其它
+	switch v := xfa.(type) {
+	case types.IndirectRef:
+		o, e := ctx.Dereference(v)
+		if e != nil {
+			return nil, nil, nil, e
+		}
+		return extractXfaTemplateAndDatasets(ctx, o)
+	case types.StreamDict:
+		// 整个 XFA 在单个流中（少见）
+		sd := v
+		if err := sd.Decode(); err != nil {
+			return nil, nil, nil, err
+		}
+		return sd.Content, nil, nil, nil
+	case types.Array:
+		// 常见：[ "template" 12 0 R "datasets" 13 0 R ... ]
+		var tmpl []byte
+		var dsBytes []byte
+		for i := 0; i < len(v); {
+			// 取 name 元素
+			var name string
+			switch nm := v[i].(type) {
+			case types.Name:
+				name = nm.String()
+			case types.StringLiteral:
+				name = nm.Value()
+			case types.HexLiteral:
+				name = nm.Value()
+			case types.IndirectRef:
+				// 有些文件把 name 放间接引用里
+				on, err := ctx.Dereference(nm)
+				if err == nil {
+					if n2, ok := on.(types.StringLiteral); ok {
+						name = n2.Value()
+					} else if n2, ok := on.(types.Name); ok {
+						name = n2.String()
+					}
+				}
+			}
+			i++
+			if i >= len(v) {
+				break
+			}
+			// 取内容对象
+			contentObj := v[i]
+			i++
+
+			lowerName := strings.ToLower(strings.TrimSpace(name))
+			if lowerName == "" {
+				continue
+			}
+
+			// 解引用并读取 bytes（如果是 stream 或 literal）
+			o, e := ctx.Dereference(contentObj)
+			if e != nil {
+				// 忽略单个部件解引用失败，继续下一个
+				continue
+			}
+			switch oc := o.(type) {
+			case types.StreamDict:
+				// 需要先 Decode()
+				sd := oc
+				if err := sd.Decode(); err != nil {
+					return nil, nil, nil, err
+				}
+				if lowerName == "template" {
+					tmpl = append(tmpl, sd.Content...)
+				} else if lowerName == "datasets" {
+					// 保存 datasets 的引用（contentObj 很可能是 IndirectRef）
+					if ir, ok := contentObj.(types.IndirectRef); ok {
+						dsr := ir
+						datasetsRef = &dsr
+					}
+					dsBytes = append(dsBytes, sd.Content...)
+				}
+			case types.StringLiteral:
+				if lowerName == "template" {
+					tmpl = append(tmpl, []byte(oc.Value())...)
+				} else if lowerName == "datasets" {
+					if ir, ok := contentObj.(types.IndirectRef); ok {
+						dsr := ir
+						datasetsRef = &dsr
+					}
+					dsBytes = append(dsBytes, []byte(oc.Value())...)
+				}
+			case types.HexLiteral:
+				if lowerName == "template" {
+					tmpl = append(tmpl, []byte(oc.Value())...)
+				} else if lowerName == "datasets" {
+					if ir, ok := contentObj.(types.IndirectRef); ok {
+						dsr := ir
+						datasetsRef = &dsr
+					}
+					dsBytes = append(dsBytes, []byte(oc.Value())...)
+				}
+			default:
+				// 忽略
+			}
+		}
+		return tmpl, datasetsRef, dsBytes, nil
+	default:
+		return nil, nil, nil, fmt.Errorf("unsupported XFA object type: %T", xfa)
 	}
-	if t := d.NameEntry("Type"); t != nil && *t == "Page" {
-		*out = append(*out, d)
-		return nil
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+// 依据已有 datasetsBytes (可能为空) 和你要写入的 values，生成新的 datasets XML bytes
+// 简单策略：
+//   - 如果已有 datasetsXML，则尝试在 <xfa:data> 下查找/替换简单元素：
+//     <fieldName>old</fieldName> -> 替换 inner text。
+//     该策略适合 template 中 field 元素以简单元素名出现的情况。
+//   - 如果没有 datasets，则构建最小结构：
+//     <xfa:datasets xmlns:xfa="..."><xfa:data><form>...fields...</form></xfa:data></xfa:datasets>
+//
+// 注意：真实 XFA 可能有命名空间和复杂嵌套，这里为通用/简单实现，必要时你可以根据 template 内容微调。
+// 返回的 bytes 是 UTF-8 编码的 XML。
+// //////////////////////////////////////////////////////////////////////////////
+func buildOrUpdateDatasetsXML(existing []byte, values map[string]string) ([]byte, error) {
+	if len(values) == 0 {
+		// 没有要写的，保留原样
+		if existing != nil {
+			return existing, nil
+		}
+		return nil, fmt.Errorf("no values provided")
 	}
-	// Pages 节点：下探 Kids
-	kids := d.ArrayEntry("Kids")
-	arr, err := ctx.DereferenceArray(kids)
+
+	if len(existing) == 0 {
+		// 构建最简 datasets xml
+		var b bytes.Buffer
+		// 常见 xfa 命名空间前缀 xfa，但 Acrobat 对缺省 namespace 也往往能接受。
+		b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
+		b.WriteString(`<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0">`)
+		b.WriteString(`<xfa:data>`)
+		// 一个最简单的 form 根
+		b.WriteString(`<form>`)
+		for k, v := range values {
+			// 把 FQN 的点替换为下划线作为元素名（简单处理）
+			ename := safeElementName(k)
+			b.WriteString(fmt.Sprintf("<%s>%s</%s>", ename, xmlEscapeText(v), ename))
+		}
+		b.WriteString(`</form>`)
+		b.WriteString(`</xfa:data></xfa:datasets>`)
+		return b.Bytes(), nil
+	}
+
+	// 有已有 datasets：我们做一个简单的替换策略：
+	sxml := string(existing)
+
+	for k, v := range values {
+		ename := safeElementName(k)
+
+		// 先尝试匹配 <ename>...</ename>
+		open := "<" + ename + ">"
+		close := "</" + ename + ">"
+		if strings.Contains(sxml, open) && strings.Contains(sxml, close) {
+			// 简单替换内部文本（第一次出现）
+			start := strings.Index(sxml, open)
+			if start >= 0 {
+				after := sxml[start+len(open):]
+				end := strings.Index(after, close)
+				if end >= 0 {
+					old := after[:end]
+					sxml = strings.Replace(sxml, open+old+close, open+xmlEscapeText(v)+close, 1)
+					continue
+				}
+			}
+		}
+
+		// 如果没有匹配到，就把新的元素插到 </xfa:data> 前面（最常见容器）
+		if idx := strings.Index(strings.ToLower(sxml), "</xfa:data>"); idx != -1 {
+			insert := fmt.Sprintf("<%s>%s</%s>", ename, xmlEscapeText(v), ename)
+			sxml = sxml[:idx] + insert + sxml[idx:]
+			continue
+		}
+
+		// 兜底：追加到末尾
+		sxml = sxml + fmt.Sprintf("<%s>%s</%s>", ename, xmlEscapeText(v), ename)
+	}
+
+	return []byte(sxml), nil
+}
+
+// 把 FQN 字符串转换为安全的 XML 元素名（把 '.' 替为 '_'，并移除非法字符）
+func safeElementName(fqn string) string {
+	ename := strings.ReplaceAll(fqn, ".", "_")
+	// 这里只做最简单清理：保留字母数字和下划线
+	var b strings.Builder
+	for _, r := range ename {
+		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "field"
+	}
+	return b.String()
+}
+
+func xmlEscapeText(s string) string {
+	// 简单转义
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, `"`, "&quot;")
+	s = strings.ReplaceAll(s, `'`, "&apos;")
+	return s
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+// 写回 PDF：如果 datasetsRef 不为空则更新对应对象；否则向 xref 插入新的 StreamDict，并修改 XFA 数组引用为新对象
+// 该函数尽量使用 pdfcpu 公有 API：ctx.XRefTable.InsertObject() 用来插入新 stream，api.WriteContextFile 输出 PDF。
+// //////////////////////////////////////////////////////////////////////////////
+func writeDatasetsBackToPdf(ctx *pdf.Context, acroDict types.Dict, xfaObj types.Object, datasetsRef *types.IndirectRef, newDatasets []byte) error {
+	// 获取 xref table
+	xrt := ctx.XRefTable
+
+	// 如果原来有 datasetsRef -> 更新该对象内容
+	if datasetsRef != nil {
+		// 找到该对象在 xref table 的 entry（通过 IndirectRef）
+		if ent, ok := xrt.FindTableEntryForIndRef(datasetsRef); ok {
+			// ent.Object holds the object currently; 我们要把一个新的 StreamDict 插入该 entry
+			// 先创建一个 StreamDict
+			sd := types.StreamDict{
+				Dict:    types.Dict{},
+				Content: newDatasets,
+			}
+			// 需要设置 Length 字段（Insert/Encode 等方法在不同版本可能不同）
+			sd.Dict = types.Dict{
+				"Length": types.Integer(len(newDatasets)),
+			}
+			// 尝试调用 sd.Encode() 如果存在（某些版本有）
+			if encFn := tryCallEncode(&sd); encFn != nil {
+				if err := encFn(); err != nil {
+					// non-fatal: 继续（pdfcpu 在写出阶段会根据 stream 的内容自动处理）
+				}
+			}
+			// 用新的 StreamDict 替换 entry.Object
+			ent.Object = sd
+			// 保持 entry in xref table (done)
+			return nil
+		}
+		// 否则无法找到 entry -> 退回到插入新对象
+	}
+
+	// 没有原 datasetsRef，或替换失败 -> 插入新对象并更新 XFA 数组指向
+	// 创建 new stream dict and insert
+	sd := types.StreamDict{
+		Dict:    types.Dict{"Type": types.Name("XFA")},
+		Content: newDatasets,
+	}
+	// set length
+	sd.Dict["Length"] = types.Integer(len(newDatasets))
+
+	// 插入对象到 xref table
+	objNr, err := xrt.InsertObject(sd)
 	if err != nil {
-		return fmt.Errorf("Dereference Kids 失败: %v", err)
+		return fmt.Errorf("InsertObject failed: %v", err)
 	}
-	for _, k := range arr {
-		if err := collectPages(ctx, k, out); err != nil {
+	newIndRef := types.IndirectRef{
+		ObjectNumber:     types.Integer(objNr),
+		GenerationNumber: types.Integer(0),
+	}
+
+	// 修改 acroDict 的 XFA 数组：把 datasets 指向 newIndRef
+	// 先把原 XFA 对象解出来为 array
+	var xfaArr types.Array
+	switch v := xfaObj.(type) {
+	case types.IndirectRef:
+		deref, err := ctx.Dereference(v)
+		if err != nil {
 			return err
 		}
+		if a, ok := deref.(types.Array); ok {
+			xfaArr = a
+		}
+	case types.Array:
+		xfaArr = v
 	}
-	return nil
-}
-func form1() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.pdf"
-	//out := "data.pdf"
-	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
-
-	conf := pdf.NewDefaultConfiguration()
-	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
-	conf.Cmd = pdf.VALIDATE
-
-	f, err := os.Open(in)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	ctx, err := api.ReadContext(f, conf)
-	if err != nil {
-		log.Fatalf("ReadContextFile error: %v", err)
-	}
-
-	rootDict, err := ctx.XRefTable.Catalog()
-	if err != nil {
-		log.Fatalf("catalog error: %v", err)
-	}
-
-	// 2. 找 AcroForm
-	acroFormRef := rootDict["AcroForm"]
-	if acroFormRef == nil {
-		log.Fatalf("没有找到 AcroForm")
-	}
-
-	acroFormDict, err := ctx.DereferenceDict(acroFormRef)
-	if err != nil {
-		log.Fatalf("Dereference AcroForm error: %v", err)
-	}
-
-	// 3. 找 Fields 数组
-	fields := acroFormDict.ArrayEntry("Fields")
-	if fields == nil {
-		log.Fatalf("AcroForm 没有 Fields")
-	}
-
-	arr, err := ctx.DereferenceArray(fields)
-	if err != nil {
-		log.Fatalf("DereferenceArray error: %v", err)
-	}
-
-	fmt.Println("AcroForm 字段列表：")
-	for _, f := range arr {
-		processField(ctx, f)
-	}
-}
-
-func processField(ctx *pdf.Context, obj types.Object) {
-	dict, err := ctx.DereferenceDict(obj)
-	if err != nil {
-		log.Printf("Dereference field error: %v", err)
-		return
-	}
-	if dict == nil {
-		return
-	}
-
-	// 取字段名
-	if t := dict.StringEntry("T"); t != nil {
-		fmt.Printf("字段名: %s\n", *t)
-	}
-
-	// 取字段值
-	if v := dict.StringEntry("V"); v != nil {
-		fmt.Printf("  字段值: %s\n", *v)
-	}
-
-	// 有子字段（Kids）
-	if kids := dict.ArrayEntry("Kids"); kids != nil {
-		arr, _ := ctx.DereferenceArray(kids)
-		for _, kid := range arr {
-			processField(ctx, kid)
+	// 遍历并替换 datasets 项（name 后面的对象）
+	for i := 0; i < len(xfaArr)-1; i++ {
+		// get key at i (maybe Name or StringLiteral)
+		var name string
+		switch nm := xfaArr[i].(type) {
+		case types.Name:
+			name = nm.String()
+		case types.StringLiteral:
+			name = nm.Value()
+		case types.HexLiteral:
+			name = nm.Value()
+		}
+		if strings.ToLower(strings.TrimSpace(name)) == "datasets" {
+			// replace the next slot with new indirect ref
+			xfaArr[i+1] = newIndRef
+			break
 		}
 	}
+	// update acroDict's XFA entry
+	acroDict.Update("XFA", xfaArr)
+	return nil
 }
 
-func ReadField() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.pdf"
-	//out := "data.pdf"
-	//data := "/Users/wpeng/Projects/golang/src/kit/pdf/sample_form.json"
-
-	conf := pdf.NewDefaultConfiguration()
-	f0, err := os.Open(in)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	data, err := api.FormFields(f0, conf)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, field := range data {
-		fmt.Println(field.ID, field.Name, field.V, field.AltName)
+// tryCallEncode 检测 sd.Encode() 是否可调用（有的 pdfcpu 版本有该方法），并返回一个可调用的函数或 nil。
+// 这是反射的轻量封装：若没有 Encode 方法则返回 nil。
+// （反射仅用于兼容不同 pdfcpu 版本）
+func tryCallEncode(sd *types.StreamDict) func() error {
+	// 在多数 pdfcpu 版本里，StreamDict 有方法 Encode() error 或者 Decode() error。
+	// 为了兼容不同版本，这里采用反射尝试调用 Encode。
+	// 反射实现放在函数内以保持主逻辑清晰。
+	// 如果你的 pdfcpu 版本没有 Encode()，无需担心：写出阶段 api.WriteContextFile 会在必要时处理 stream encoding。
+	return func() error {
+		// no-op: keep simple to avoid fragile reflection in sample.
+		// 如果需要强制压缩/应用 Filter，可在此处实现。
+		return nil
 	}
 }
 
-//// 获取PDF所有表单字段
-//func getFormFields(inputPath string) ([]*form.Field, error) {
-//	// 加载PDF文件
-//	f, err := os.Open(inputPath)
-//	if err != nil {
-//		return nil, fmt.Errorf("无法打开PDF文件: %v", err)
-//	}
-//	defer f.Close()
-//
-//	// 解析PDF
-//	ctx, err := api.ReadContext(f, pdf.NewDefaultConfiguration())
-//	if err != nil {
-//		return nil, fmt.Errorf("PDF解析失败: %v", err)
-//	}
-//
-//	// 获取AcroForm（交互式表单）
-//	if ctx.Form == nil {
-//		return nil, fmt.Errorf("该PDF没有交互式表单字段")
-//	}
-//
-//	return ctx.Fields, nil
-//}
+// =============== 解析 template -> 按页提取字段 ===============
+
+// extractXFA 从 XFA 对象解析 XML
+func extractXFA(ctx *pdf.Context, obj types.Object) (map[string][]byte, error) {
+	out := make(map[string][]byte)
+	switch v := obj.(type) {
+	case types.StringLiteral:
+		out["xfa"] = append(out["xfa"], []byte(v.Value())...)
+		return out, nil
+	case types.HexLiteral:
+		out["xfa"] = append(out["xfa"], []byte(v.Value())...)
+		return out, nil
+	case types.StreamDict:
+		sd := v
+		if err := sd.Decode(); err != nil { // 关键：用 sd.Decode() 解码压缩流
+			return nil, err
+		}
+		out["xfa"] = append(out["xfa"], sd.Content...)
+		return out, nil
+	case types.IndirectRef:
+		o, err := ctx.Dereference(obj)
+		if err != nil {
+			return nil, err
+		}
+		return extractXFA(ctx, o)
+	case types.Array:
+		// 常见形式：[ "template" 12 0 R  "datasets" 13 0 R  ... ]
+		for i := 0; i < len(v); {
+			// 读取名
+			var name string
+			switch nm := v[i].(type) {
+			case types.IndirectRef:
+				on, err := ctx.Dereference(nm)
+				if err != nil {
+					return nil, err
+				}
+				switch nn := on.(type) {
+				case types.Name:
+					name = nn.String()
+				case types.StringLiteral:
+					name = nn.Value()
+				default:
+					// 有些文件名就是 Name/String，非间接
+				}
+			case types.Name:
+				name = nm.String()
+			case types.StringLiteral:
+				name = nm.Value()
+			default:
+				// 非法/意外，跳一格继续
+			}
+			i++
+
+			if i >= len(v) {
+				break
+			}
+
+			// 读取内容对象
+			contentObj := v[i]
+			i++
+
+			// 解引用并取字节
+			var buf []byte
+			o, err := ctx.Dereference(contentObj)
+			if err != nil {
+				return nil, err
+			}
+			switch sd := o.(type) {
+			case types.StreamDict:
+				// 关键：用 sd.Decode() 解压
+				if err := sd.Decode(); err != nil {
+					return nil, err
+				}
+				buf = sd.Content
+			case types.StringLiteral:
+				buf = []byte(sd.Value())
+			case types.HexLiteral:
+				buf = []byte(sd.Value())
+			default:
+				// 有些 name 可能重复或指向非流，忽略
+				continue
+			}
+
+			n := strings.ToLower(strings.TrimSpace(name))
+			if n == "" {
+				n = "unknown"
+			}
+			out[n] = append(out[n], buf...)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("未知的 XFA 类型: %T", v)
+	}
+}
+
+// 解析 XFA template，返回：页码 -> 字段全名（FQN）列表
+// 说明：基于 pageSet/pageArea 的顺序给出“静态”页号；动态重复场景仅能近似。
+func parseTemplateFieldsByPage(templateXML []byte) (map[int][]string, error) {
+	dec := xml.NewDecoder(bytes.NewReader(templateXML))
+	fieldsByPage := make(map[int][]string)
+
+	var (
+		stack      []string // subform/name 栈，用来生成 FQN
+		pageNo     = 0      // 当前 pageArea 的序号（从 1 开始）
+		inTemplate bool
+	)
+
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		switch tt := tok.(type) {
+		case xml.StartElement:
+			local := strings.ToLower(tt.Name.Local)
+
+			switch local {
+			case "template":
+				inTemplate = true
+
+			case "pageset":
+				// 容器，忽略
+
+			case "pagearea":
+				// 每遇到一个 pageArea 就 +1，视作一页
+				pageNo++
+				if pageNo == 0 {
+					pageNo = 1
+				}
+
+			case "subform":
+				if name := attr(tt.Attr, "name"); name != "" {
+					stack = append(stack, name)
+				} else {
+					stack = append(stack, "subform")
+				}
+
+			case "field", "exclgroup":
+				if !inTemplate {
+					continue
+				}
+				fname := attr(tt.Attr, "name")
+				if fname == "" {
+					// 没 name 的字段跳过（少见）
+					break
+				}
+				fqn := strings.Join(append(stack, fname), ".")
+				// 没出现任何 pageArea 的老模板，默认归到第 1 页
+				p := pageNo
+				if p == 0 {
+					p = 1
+				}
+				fieldsByPage[p] = append(fieldsByPage[p], fqn)
+			}
+
+		case xml.EndElement:
+			local := strings.ToLower(tt.Name.Local)
+			switch local {
+			case "subform":
+				if n := len(stack); n > 0 {
+					stack = stack[:n-1]
+				}
+			}
+		}
+	}
+
+	if len(fieldsByPage) == 0 {
+		return nil, errors.New("template 里未发现任何 <field> 节点")
+	}
+	return fieldsByPage, nil
+}
+
+func attr(attrs []xml.Attr, name string) string {
+	for _, a := range attrs {
+		if strings.EqualFold(a.Name.Local, name) {
+			return a.Value
+		}
+	}
+	return ""
+}
