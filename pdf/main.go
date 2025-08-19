@@ -13,16 +13,195 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/STR_form.pdf"
+	ReplaceXFA()
+}
+
+func ReplaceXFA() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/HongKong_STR_form_O.pdf"
+	outFile := "STR_Form_f.pdf"
+
+	// 读取新的 XML 数据
+	xmlData, err := ioutil.ReadFile("/Users/wpeng/Projects/golang/src/kit/pdf/template/dataset.xml")
+	if err != nil {
+		log.Fatal("Error reading XML data:", err)
+		return
+	}
+
+	lines := strings.Split(string(xmlData), "\n")
+	var cleanLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			cleanLines = append(cleanLines, trimmed)
+		}
+	}
+	xmlData = []byte(strings.Join(cleanLines, "\n"))
+
+	conf := pdf.NewDefaultConfiguration()
+	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
+	conf.Cmd = pdf.VALIDATE
+
+	f, err := os.Open(in)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ctx, err := api.ReadContext(f, conf)
+	if err != nil {
+		log.Fatalf("ReadContextFile error: %v", err)
+	}
+
+	rootDict, err := ctx.XRefTable.Catalog()
+	if err != nil {
+		log.Fatalf("catalog error: %v", err)
+	}
+
+	// 从 Catalog 里拿 AcroForm 引用
+	formRef, found := rootDict.Find("AcroForm")
+	if !found {
+		log.Println("没有 AcroForm")
+		return
+	}
+
+	formDict, err := ctx.DereferenceDict(formRef)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 取 XFA
+	xfaObj, ok := formDict.Find("XFA")
+	if !ok {
+		log.Fatal("AcroForm 没有 XFA")
+	}
+
+	xfaArr, err := ctx.DereferenceArray(xfaObj)
+	if !ok {
+		log.Fatal("XFA is not an array or couldn't deref")
+	}
+
+	// 4) 找到 datasets 流对象
+	for i := 0; i < len(xfaArr); i += 2 {
+		name := objToNameString(xfaArr[i])
+		if strings.EqualFold(strings.TrimSpace(name), "datasets") {
+			sObjNr, err := ctx.NewEmbeddedStreamDict(bytes.NewReader(newDatasetsXML()), time.Now())
+			if err != nil {
+				log.Fatal("IndRefForNewObject error")
+				return
+			}
+			xfaArr[i+1] = *sObjNr
+			break
+			//targetObj := xfaArr[i+1]
+			//o, _ := ctx.Dereference(targetObj)
+			//if data, ok := o.(types.StreamDict); ok {
+			//	// 清理 XML 空行并赋值
+			//	_ = data.Decode()
+			//	data.Content = cleanXML(xmlData)
+			//	data.Raw = nil
+			//	// 编码流（Length 自动更新）
+			//	err = data.Encode()
+			//	if err != nil {
+			//		log.Fatal("stream.Encode error:", err)
+			//		return
+			//	}
+			//	// 注册为新对象
+			//	sObjNr, err := ctx.IndRefForNewObject(data)
+			//	if err != nil {
+			//		log.Fatal("IndRefForNewObject error")
+			//		return
+			//	}
+			//	xfaArr[i+1] = *sObjNr
+			//	break
+			//}
+
+		}
+	}
+
+	// 写回 PDF
+	err = api.WriteContextFile(ctx, outFile)
+	if err != nil {
+		return
+	}
+}
+
+func cleanXML(xmlData []byte) []byte {
+	// 去掉空行
+	lines := strings.Split(string(xmlData), "\n")
+	var buf bytes.Buffer
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" { // 非空行才写入
+			buf.WriteString(line)
+		}
+	}
+	return buf.Bytes()
+}
+
+func print(ctx *pdf.Context, xfaArr types.Array) {
+	for i := 0; i+1 < len(xfaArr); i += 2 {
+		// name entry
+		name := objToNameString(xfaArr[i])
+		fmt.Printf("Entry %d: name=%s\n", i/2, name)
+
+		// value entry
+		val := xfaArr[i+1]
+		fmt.Printf("  value type: %T\n", val)
+
+		// if indirect ref, print obj number and stream info
+		if indRef, ok := val.(types.IndirectRef); ok {
+			objNr := indRef.ObjectNumber.Value()
+			gen := indRef.GenerationNumber.Value()
+			fmt.Printf("  -> IndirectRef %d %d R\n", objNr, gen)
+			obj, err := ctx.Dereference(indRef)
+			if err != nil {
+				fmt.Printf("     deref error: %v\n", err)
+				continue
+			}
+			switch s := obj.(type) {
+			case types.StreamDict:
+				fmt.Printf("     stream found: Length=%v, keys=", s.Dict["Length"])
+				for k := range s.Dict {
+					fmt.Printf("%s ", k)
+				}
+				fmt.Println()
+				if f, ok := s.Dict.Find("Filter"); ok {
+					fmt.Printf("     Filter: %T -> %v\n", f, f)
+				}
+			default:
+				fmt.Printf("     dereferenced to type: %T\n", obj)
+			}
+		} else {
+			// direct object - maybe a stream inline (rare)
+			obj, err := ctx.Dereference(val)
+			if err == nil {
+				switch s := obj.(type) {
+				case types.StreamDict:
+					fmt.Printf("  -> Inline stream: Length=%v, keys=", s.Dict["Length"])
+					for k := range s.Dict {
+						fmt.Printf("%s ", k)
+					}
+					fmt.Println()
+					if f, ok := s.Dict.Find("Filter"); ok {
+						fmt.Printf("     Filter: %T -> %v\n", f, f)
+					}
+				default:
+					fmt.Printf("  -> Inline type: %T\n", obj)
+				}
+			}
+		}
+	}
+}
+
+func demo1() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/template/HongKong_STR_form.pdf"
 	outFile := "STR_Form_filled.pdf"
 
 	targetValues := map[string]string{
-		"TrxTotalAmount":  "1",
-		"TrxTotalPeriod":  "2",
-		"TrxDailyAverage": "2",
+		"TrxTotalAmount":  "<TrxTotalAmount>100.00</TrxTotalAmount>",
+		"TrxTotalPeriod":  "<TrxTotalPeriod>1.00000000</TrxTotalPeriod>",
+		"TrxDailyAverage": "<TrxDailyAverage>100.00</TrxDailyAverage>",
 	}
 
 	conf := pdf.NewDefaultConfiguration()
@@ -69,6 +248,9 @@ func main() {
 
 	// 4) 找到 datasets 流对象
 	var datasetsStream *types.StreamDict
+	var templateStream *types.StreamDict
+	var formsStream *types.StreamDict
+	count := 0
 	for i := 0; i < len(xfaArr); i += 2 {
 		name := objToNameString(xfaArr[i])
 		if strings.EqualFold(strings.TrimSpace(name), "datasets") {
@@ -76,6 +258,27 @@ func main() {
 			if sd, ok := o.(types.StreamDict); ok {
 				datasetsStream = &sd
 			}
+
+			count++
+		}
+
+		if strings.EqualFold(strings.TrimSpace(name), "template") {
+			o, _ := ctx.Dereference(xfaArr[i+1])
+			if sd, ok := o.(types.StreamDict); ok {
+				templateStream = &sd
+			}
+			count++
+		}
+
+		if strings.EqualFold(strings.TrimSpace(name), "form") {
+			o, _ := ctx.Dereference(xfaArr[i+1])
+			if sd, ok := o.(types.StreamDict); ok {
+				formsStream = &sd
+			}
+			count++
+		}
+
+		if count == 3 {
 			break
 		}
 	}
@@ -91,13 +294,39 @@ func main() {
 		return
 	}
 
-	origXML := datasetsStream.Content
+	if templateStream == nil {
+		log.Fatal("template stream not found")
+		return
+	}
+
+	err = templateStream.Decode()
+	if err != nil {
+		log.Fatalf("Decode template stream failed: %v", err)
+		return
+	}
+
+	if formsStream == nil {
+		log.Fatal("template stream not found")
+		return
+	}
+
+	err = formsStream.Decode()
+	if err != nil {
+		log.Fatalf("Decode template stream failed: %v", err)
+		return
+	}
+
+	origDataXML := datasetsStream.Content
+	templateXML := templateStream.Content
+	form := formsStream.Content
+
+	fmt.Println(templateXML)
+	fmt.Println(form)
+	fmt.Println(origDataXML)
+	fmt.Println(targetValues)
 
 	// 6) 修改 datasets XML
-	newXML, err := modifyDatasetsXML(origXML, targetValues)
-	if err != nil {
-		log.Fatalf("modifyDatasetsXML error: %v", err)
-	}
+	newXML := newDatasetsXML()
 
 	// 7) 读取原 PDF bytes
 	pdfBytes, err := ioutil.ReadFile(in)
@@ -117,7 +346,6 @@ func main() {
 	newBytes := newXML
 	if len(newBytes) > int(oldLen) {
 		log.Println("warning: new datasets is larger than original; Acrobat 可能仍可接受，但长度超出原位置")
-		return
 	}
 
 	// 构建新 PDF bytes
@@ -234,6 +462,465 @@ func modifyDatasetsXML(orig []byte, values map[string]string) ([]byte, error) {
 	}
 	out = append([]byte(xml.Header), out...)
 	return out, nil
+}
+
+func newDatasetsXML() []byte {
+	s := `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/">
+    <xfa:data>
+        <STR>
+            <VersionNo>3.0</VersionNo>
+            <mergeFormReload>FALSE</mergeFormReload>
+            <CertExpiryDate>
+                <body xmlns="http://www.w3.org/1999/xhtml">
+                    <p style="margin-top:0in;margin-bottom:0in;">
+                        <span style="xfa-spacerun:yes"> </span>
+                    </p>
+                </body>
+            </CertExpiryDate>
+            <STRHeader>
+                <InstitutionID/>
+                <RptOfficerID/>
+                <Cap000>false</Cap000>
+                <isRelatedToExistingInvestigation>false</isRelatedToExistingInvestigation>
+                <isRelatedToPreviousDisclosure>false</isRelatedToPreviousDisclosure>
+                <NumOfSubject/>
+                <NumOfOrganization/>
+                <NumOfAccount/>
+                <NumOfPhone/>
+                <NumOfAddress/>
+                <NumOfTransaction/>
+            </STRHeader>
+            <EntityPersonList>
+                <EntityPersonDetail>
+                    <PersonID>20250818160027069</PersonID>
+                    <ChiName>
+                        <ChineseCommercialCode>
+                            <FourDigitCode/>
+                        </ChineseCommercialCode>
+                    </ChiName>
+                    <HKID>
+                        <Identifier/>
+                    </HKID>
+                    <Sex>U</Sex>
+                    <EmailList>
+                        <EmailDetail>
+                            <Email/>
+                        </EmailDetail>
+                    </EmailList>
+                </EntityPersonDetail>
+            </EntityPersonList>
+            <EntityOrganisationList>
+                <EntityOrganisationDetail>
+                    <OrgID>20250818160027070</OrgID>
+                    <LocalCompanyIndicator>false</LocalCompanyIndicator>
+                    <LocalBusinessRegNumber>
+                        <BusinessRegistrationNumber/>
+                    </LocalBusinessRegNumber>
+                    <OverseasCompanyIndicator>false</OverseasCompanyIndicator>
+                    <EmailList>
+                        <EmailDetail>
+                            <Email/>
+                        </EmailDetail>
+                    </EmailList>
+                </EntityOrganisationDetail>
+            </EntityOrganisationList>
+            <EntityAccountList>
+                <EntityAccountDetail>
+                    <AccID>20250818160027071</AccID>
+                    <AccCurrency>HKD</AccCurrency>
+                </EntityAccountDetail>
+            </EntityAccountList>
+            <EntityPhoneList>
+                <EntityPhoneDetail>
+                    <PhoneID>20250818160027070</PhoneID>
+                    <PhoneNumDetail>
+                        <SubscriberNumber/>
+                    </PhoneNumDetail>
+                </EntityPhoneDetail>
+            </EntityPhoneList>
+            <EntityAddressList>
+                <EntityAddressDetail>
+                    <AddressID>20250818160027070</AddressID>
+                    <AddressDetail>
+                        <AddressIndicator/>
+                        <FreeAddress>
+                            <Line1/>
+                            <Line2/>
+                            <Line3/>
+                        </FreeAddress>
+                        <FixedAddress>
+                            <FlatNumber/>
+                            <Floor/>
+                            <BlockNumber/>
+                            <BuildingEng/>
+                            <BuildingChi/>
+                            <EstVillage/>
+                            <StreetNumFrom/>
+                            <StreetNumTo/>
+                            <StreetNameEng/>
+                            <StreetNameChi/>
+                            <District/>
+                            <Area/>
+                            <Country/>
+                        </FixedAddress>
+                    </AddressDetail>
+                </EntityAddressDetail>
+            </EntityAddressList>
+            <EntityTrxList>
+                <EntityTrxDetail>
+                    <TrxID>1</TrxID>
+                    <TrxDateTimeFrom>2025-08-18 00:00:00</TrxDateTimeFrom>
+                    <TrxDateTimeTo>2025-08-19 00:00:00</TrxDateTimeTo>
+                    <TrxSubject/>
+                    <SubjectID>
+                        <PersonID>20250818160027069</PersonID>
+                        <OrgID/>
+                        <AccID/>
+                    </SubjectID>
+                    <TrxType>TRW</TrxType>
+                    <TrxAmount>-100.00</TrxAmount>
+                    <TrxCurrency>HKD</TrxCurrency>
+                    <Counterpart>
+                        <CounterpartSubjectID>
+                            <PersonID/>
+                            <OrgID/>
+                            <AccID/>
+                            <CounterpartAccNum/>
+                            <BeneficiaryOrPayer/>
+                        </CounterpartSubjectID>
+                    </Counterpart>
+                </EntityTrxDetail>
+            </EntityTrxList>
+            <TrxTotalAmount>100.00</TrxTotalAmount>
+            <TrxTotalPeriod>1.00000000</TrxTotalPeriod>
+            <TrxDailyAverage>100.00</TrxDailyAverage>
+            <SuspectedCrime>
+                <SuspectedCrimeList>
+                    <SuspectedCrimeDetail>
+                        <ReasonCode>TERR</ReasonCode>
+                    </SuspectedCrimeDetail>
+                    <SuspectedCrimeDetail>
+                        <ReasonCode>TRHM</ReasonCode>
+                    </SuspectedCrimeDetail>
+                </SuspectedCrimeList>
+            </SuspectedCrime>
+            <SuspiciousIndicator>
+                <SuspiciousIndicatorList>
+                    <SuspiciousIndicatorDetail>
+                        <ReasonCode>ITBA</ReasonCode>
+                    </SuspiciousIndicatorDetail>
+                </SuspiciousIndicatorList>
+            </SuspiciousIndicator>
+            <OpenSourceInformation>
+                <WebsiteList>
+                    <WebsiteDetail>
+                        <Website/>
+                    </WebsiteDetail>
+                </WebsiteList>
+            </OpenSourceInformation>
+            <AttachmentList>
+                <AttachmentDetail>
+                    <Sequence>1</Sequence>
+                    <FileName/>
+                    <FileSize/>
+                    <FileID/>
+                    <FileContent/>
+                </AttachmentDetail>
+            </AttachmentList>
+        </STR>
+    </xfa:data>
+    <dd:dataDescription xmlns:dd="http://ns.adobe.com/data-description/" dd:name="STR">
+        <STR>
+            <VersionNo/>
+            <STRNum dd:minOccur="0" dd:nullType="exclude"/>
+            <SubmissionNum dd:minOccur="0" dd:nullType="exclude"/>
+            <SubmissionDate dd:minOccur="0" dd:nullType="exclude"/>
+            <AckDate dd:minOccur="0" dd:nullType="exclude"/>
+            <ConsentDate dd:minOccur="0" dd:nullType="exclude"/>
+            <ConsentFlag dd:minOccur="0" dd:nullType="exclude"/>
+            <ConsentRemark dd:minOccur="0" dd:nullType="exclude"/>
+            <mergeFormReload/>
+            <CertExpiryDate dd:minOccur="0" dd:nullType="exclude"/>
+            <STRHeader>
+                <InstitutionID/>
+                <RptOfficerID/>
+                <InstitutionName dd:minOccur="0" dd:nullType="exclude"/>
+                <RptOfficerName dd:minOccur="0" dd:nullType="exclude"/>
+                <OrgReference dd:minOccur="0" dd:nullType="exclude"/>
+                <PreTransaction dd:minOccur="0" dd:nullType="exclude"/>
+                <Phone dd:minOccur="0" dd:nullType="exclude"/>
+                <Fax dd:minOccur="0" dd:nullType="exclude"/>
+                <Email dd:minOccur="0" dd:nullType="exclude"/>
+                <Cap405 dd:minOccur="0" dd:nullType="exclude"/>
+                <Cap455 dd:minOccur="0" dd:nullType="exclude"/>
+                <Cap575 dd:minOccur="0" dd:nullType="exclude"/>
+                <Cap000 dd:minOccur="0" dd:nullType="exclude"/>
+                <UrgentCase dd:minOccur="0" dd:nullType="exclude"/>
+                <isRelatedToExistingInvestigation/>
+                <isRelatedToPreviousDisclosure dd:minOccur="0" dd:nullType="exclude"/>
+                <JFIUNo dd:minOccur="0" dd:nullType="exclude"/>
+                <UrRefNo dd:minOccur="0" dd:nullType="exclude"/>
+                <ExistCaseRef dd:minOccur="0" dd:nullType="exclude"/>
+                <InvUnit dd:minOccur="0" dd:nullType="exclude"/>
+                <NumOfSubject/>
+                <NumOfOrganization/>
+                <NumOfAccount/>
+                <NumOfPhone/>
+                <NumOfAddress/>
+                <NumOfTransaction/>
+            </STRHeader>
+            <EntityPersonList dd:minOccur="0">
+                <EntityPersonDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <PersonID dd:minOccur="0" dd:nullType="exclude"/>
+                    <FamilyName dd:minOccur="0" dd:nullType="exclude"/>
+                    <GivenName dd:minOccur="0" dd:nullType="exclude"/>
+                    <MiddleName dd:minOccur="0" dd:nullType="exclude"/>
+                    <ChiName dd:minOccur="0">
+                        <Name dd:minOccur="0" dd:nullType="exclude"/>
+                        <ChineseCommercialCode dd:maxOccur="-1" dd:minOccur="0">
+                            <FourDigitCode/>
+                        </ChineseCommercialCode>
+                    </ChiName>
+                    <HKID dd:minOccur="0">
+                        <Identifier/>
+                        <CheckDigit dd:minOccur="0" dd:nullType="exclude"/>
+                    </HKID>
+                    <IdentityType dd:minOccur="0" dd:nullType="exclude"/>
+                    <OtherIdentityTypeDescription dd:minOccur="0" dd:nullType="exclude"/>
+                    <IdentityNum dd:minOccur="0" dd:nullType="exclude"/>
+                    <Country dd:minOccur="0" dd:nullType="exclude"/>
+                    <DOB dd:minOccur="0" dd:nullType="exclude"/>
+                    <Sex dd:minOccur="0" dd:nullType="exclude"/>
+                    <Occupation dd:minOccur="0" dd:nullType="exclude"/>
+                    <Nature dd:minOccur="0" dd:nullType="exclude"/>
+                    <OtherIdList dd:minOccur="0" dd:nullType="exclude">
+                        <OtherIdDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <IdentityType dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherIdentityTypeDescription dd:minOccur="0" dd:nullType="exclude"/>
+                            <IdentityNum dd:minOccur="0" dd:nullType="exclude"/>
+                            <Country dd:minOccur="0" dd:nullType="exclude"/>
+                        </OtherIdDetail>
+                    </OtherIdList>
+                    <EmailList>
+                        <EmailDetail dd:maxOccur="-1" dd:minOccur="0">
+                            <Email/>
+                        </EmailDetail>
+                    </EmailList>
+                    <PhoneNumList dd:minOccur="0" dd:nullType="exclude">
+                        <PhoneNumDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </PhoneNumDetail>
+                    </PhoneNumList>
+                    <AddressList dd:minOccur="0" dd:nullType="exclude">
+                        <AddressDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </AddressDetail>
+                    </AddressList>
+                    <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+                </EntityPersonDetail>
+            </EntityPersonList>
+            <EntityOrganisationList dd:minOccur="0">
+                <EntityOrganisationDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <OrgID/>
+                    <OrgEngName dd:minOccur="0" dd:nullType="exclude"/>
+                    <OrgChiName dd:minOccur="0" dd:nullType="exclude"/>
+                    <DateOfInc dd:minOccur="0" dd:nullType="exclude"/>
+                    <LocalCompanyIndicator dd:minOccur="0" dd:nullType="exclude"/>
+                    <LocalBusinessRegNumber dd:minOccur="0">
+                        <BusinessRegistrationNumber/>
+                        <BranchNumber dd:minOccur="0" dd:nullType="exclude"/>
+                    </LocalBusinessRegNumber>
+                    <LocalCompanyRegNumber dd:minOccur="0" dd:nullType="exclude"/>
+                    <LocalPublicNumber dd:minOccur="0" dd:nullType="exclude"/>
+                    <OverseasCompanyIndicator dd:minOccur="0" dd:nullType="exclude"/>
+                    <OverseasCompanyCountry dd:minOccur="0" dd:nullType="exclude"/>
+                    <OverseasRegNumber dd:minOccur="0" dd:nullType="exclude"/>
+                    <NGOIndicator dd:minOccur="0" dd:nullType="exclude"/>
+                    <CharityIndicator dd:minOccur="0" dd:nullType="exclude"/>
+                    <Nature dd:minOccur="0" dd:nullType="exclude"/>
+                    <BusinessNature dd:minOccur="0" dd:nullType="exclude"/>
+                    <EmailList>
+                        <EmailDetail dd:maxOccur="-1" dd:minOccur="0">
+                            <Email/>
+                        </EmailDetail>
+                    </EmailList>
+                    <PhoneNumList dd:minOccur="0" dd:nullType="exclude">
+                        <PhoneNumDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </PhoneNumDetail>
+                    </PhoneNumList>
+                    <AddressList dd:minOccur="0" dd:nullType="exclude">
+                        <AddressDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </AddressDetail>
+                    </AddressList>
+                    <PersonList dd:minOccur="0" dd:nullType="exclude">
+                        <PersonDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </PersonDetail>
+                    </PersonList>
+                    <OrganisaionList dd:minOccur="0" dd:nullType="exclude">
+                        <OrganisaionDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </OrganisaionDetail>
+                    </OrganisaionList>
+                    <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+                </EntityOrganisationDetail>
+            </EntityOrganisationList>
+            <EntityAccountList dd:minOccur="0">
+                <EntityAccountDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <AccID/>
+                    <AccInstitution dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccNum dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccType dd:minOccur="0" dd:nullType="exclude"/>
+                    <OtherAccTypeDescription dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccOpenDate dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccCloseDate dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccCurrency dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccBalance dd:minOccur="0" dd:nullType="exclude"/>
+                    <AccBalanceDate dd:minOccur="0" dd:nullType="exclude"/>
+                    <PersonList dd:minOccur="0" dd:nullType="exclude">
+                        <PersonDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </PersonDetail>
+                    </PersonList>
+                    <OrganisaionList dd:minOccur="0" dd:nullType="exclude">
+                        <OrganisaionDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                            <ChildID dd:minOccur="0" dd:nullType="exclude"/>
+                            <ChildRole dd:minOccur="0" dd:nullType="exclude"/>
+                            <OtherChildRoleDescription dd:minOccur="0" dd:nullType="exclude"/>
+                        </OrganisaionDetail>
+                    </OrganisaionList>
+                    <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+                </EntityAccountDetail>
+            </EntityAccountList>
+            <EntityPhoneList dd:minOccur="0">
+                <EntityPhoneDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <PhoneID/>
+                    <PhoneNumDetail dd:maxOccur="-1" dd:minOccur="0">
+                        <CountryCode dd:minOccur="0" dd:nullType="exclude"/>
+                        <NationalDestinationCode dd:minOccur="0" dd:nullType="exclude"/>
+                        <SubscriberNumber/>
+                        <ExtensionNumber dd:minOccur="0" dd:nullType="exclude"/>
+                    </PhoneNumDetail>
+                </EntityPhoneDetail>
+            </EntityPhoneList>
+            <EntityAddressList dd:minOccur="0">
+                <EntityAddressDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <AddressID/>
+                    <AddressDetail dd:maxOccur="-1" dd:minOccur="0">
+                        <AddressIndicator/>
+                        <FreeAddress>
+                            <Line1/>
+                            <Line2/>
+                            <Line3/>
+                        </FreeAddress>
+                        <FixedAddress>
+                            <FlatNumber/>
+                            <Floor/>
+                            <BlockNumber/>
+                            <BuildingEng/>
+                            <BuildingChi/>
+                            <EstVillage/>
+                            <StreetNumFrom/>
+                            <StreetNumTo/>
+                            <StreetNameEng/>
+                            <StreetNameChi/>
+                            <District/>
+                            <Area/>
+                            <Country/>
+                        </FixedAddress>
+                    </AddressDetail>
+                </EntityAddressDetail>
+            </EntityAddressList>
+            <EntityTrxList dd:minOccur="0">
+                <EntityTrxDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <TrxID/>
+                    <TrxDateTimeFrom/>
+                    <TrxDateTimeTo/>
+                    <TrxSubject/>
+                    <SubjectID>
+                        <PersonID/>
+                        <OrgID/>
+                        <AccID/>
+                    </SubjectID>
+                    <TrxType/>
+                    <OtherTrxTypeDescription dd:minOccur="0" dd:nullType="exclude"/>
+                    <TrxAmount/>
+                    <TrxCurrency/>
+                    <AccBalance dd:minOccur="0" dd:nullType="exclude"/>
+                    <Branch dd:minOccur="0" dd:nullType="exclude"/>
+                    <MatchingSeq dd:minOccur="0" dd:nullType="exclude"/>
+                    <Counterpart>
+                        <CounterpartSubjectID>
+                            <PersonID/>
+                            <OrgID/>
+                            <AccID/>
+                            <CounterpartAccNum/>
+                            <BeneficiaryOrPayer/>
+                        </CounterpartSubjectID>
+                    </Counterpart>
+                    <CounterpartDetail dd:minOccur="0" dd:nullType="exclude"/>
+                </EntityTrxDetail>
+            </EntityTrxList>
+            <TrxTotalAmount dd:minOccur="0" dd:nullType="exclude"/>
+            <TrxTotalPeriod dd:minOccur="0" dd:nullType="exclude"/>
+            <TrxDailyAverage dd:minOccur="0" dd:nullType="exclude"/>
+            <SuspectedCrime dd:minOccur="0" dd:nullType="exclude">
+                <SuspectedCrimeList dd:minOccur="0" dd:nullType="exclude">
+                    <SuspectedCrimeDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                        <ReasonCode dd:minOccur="0" dd:nullType="exclude"/>
+                        <OtherReasonDescription dd:minOccur="0" dd:nullType="exclude"/>
+                    </SuspectedCrimeDetail>
+                </SuspectedCrimeList>
+                <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+            </SuspectedCrime>
+            <SuspiciousIndicator dd:minOccur="0" dd:nullType="exclude">
+                <SuspiciousIndicatorList dd:minOccur="0" dd:nullType="exclude">
+                    <SuspiciousIndicatorDetail dd:maxOccur="-1" dd:minOccur="0" dd:nullType="exclude">
+                        <ReasonCode dd:minOccur="0" dd:nullType="exclude"/>
+                        <OtherReasonDescription dd:minOccur="0" dd:nullType="exclude"/>
+                    </SuspiciousIndicatorDetail>
+                </SuspiciousIndicatorList>
+                <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+            </SuspiciousIndicator>
+            <OpenSourceInformation dd:minOccur="0">
+                <WebsiteList>
+                    <WebsiteDetail dd:maxOccur="-1" dd:minOccur="0">
+                        <Website/>
+                    </WebsiteDetail>
+                </WebsiteList>
+                <AddInfo dd:minOccur="0" dd:nullType="exclude"/>
+            </OpenSourceInformation>
+            <AttachmentList>
+                <AttachmentDetail dd:maxOccur="-1" dd:minOccur="0">
+                    <Sequence/>
+                    <FileName/>
+                    <FileSize/>
+                    <FileID/>
+                    <FileContent/>
+                </AttachmentDetail>
+            </AttachmentList>
+        </STR>
+    </dd:dataDescription>
+</xfa:datasets>`
+
+	return []byte(s)
 }
 
 func printSTRFormField(ctx *pdf.Context, xfaObj types.Object) {
