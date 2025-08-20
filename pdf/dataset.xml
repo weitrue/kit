@@ -103,16 +103,16 @@
             <EntityTrxList>
                 <EntityTrxDetail>
                     <TrxID>1</TrxID>
-                    <TrxDateTimeFrom/>
-                    <TrxDateTimeTo/>
+                    <TrxDateTimeFrom>2025-08-18 00:00:00</TrxDateTimeFrom>
+                    <TrxDateTimeTo>2025-08-19 00:00:00</TrxDateTimeTo>
                     <TrxSubject>20250818160027069</TrxSubject>
                     <SubjectID>
                         <PersonID>20250818160027069</PersonID>
                         <OrgID/>
                         <AccID/>
                     </SubjectID>
-                    <TrxType/>
-                    <TrxAmount/>
+                    <TrxType>TRW</TrxType>
+                    <TrxAmount>-100.00</TrxAmount>
                     <TrxCurrency>HKD</TrxCurrency>
                     <Counterpart>
                         <CounterpartSubjectID>
@@ -125,6 +125,27 @@
                     </Counterpart>
                 </EntityTrxDetail>
             </EntityTrxList>
+            <TrxTotalAmount>100.00</TrxTotalAmount>
+            <TrxTotalPeriod>1.00000000</TrxTotalPeriod>
+            <TrxDailyAverage>100.00</TrxDailyAverage>
+            <SuspectedCrime>
+                <SuspectedCrimeList>
+                    <SuspectedCrimeDetail>
+                        <ReasonCode>FRAU</ReasonCode>
+                    </SuspectedCrimeDetail>
+                    <SuspectedCrimeDetail>
+                        <ReasonCode>OTHS</ReasonCode>
+                    </SuspectedCrimeDetail>
+                </SuspectedCrimeList>
+                <AddInfo>Online Gambling</AddInfo>
+            </SuspectedCrime>
+            <SuspiciousIndicator>
+                <SuspiciousIndicatorList>
+                    <SuspiciousIndicatorDetail>
+                        <ReasonCode>ITBA</ReasonCode>
+                    </SuspiciousIndicatorDetail>
+                </SuspiciousIndicatorList>
+            </SuspiciousIndicator>
             <OpenSourceInformation>
                 <WebsiteList>
                     <WebsiteDetail>

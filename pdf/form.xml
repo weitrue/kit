@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<form xmlns="http://www.xfa.org/schema/xfa-form/2.8/" checksum="MSKvfeJtjWIyLKeDSlgIlVdead4=">
+<form xmlns="http://www.xfa.org/schema/xfa-form/2.8/" checksum="BC9rfOW484mV71NAxMnLHTKcjf8=">
     <subform name="STR">
         <instanceManager name="_strSumAndReportBodyPage"/>
         <subform name="strSumAndReportBodyPage">
@@ -58,7 +58,7 @@
                     <subform name="subTotalFileSize">
                         <field name="txtTotalFileSize">
                             <value>
-                                <float>0.00000000</float>
+                                <float xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
                             </value>
                         </field>
                     </subform>
@@ -2537,27 +2537,11 @@
                             <value override="1">
                                 <date>2025-08-18</date>
                             </value>
-                            <border>
-                                <edge presence="hidden" thickness="0.005in">
-                                    <color value="0,0,0"/>
-                                </edge>
-                                <fill>
-                                    <color value="255, 255, 255"/>
-                                </fill>
-                            </border>
                         </field>
                         <field name="dtTo">
                             <value override="1">
                                 <date>2025-08-19</date>
                             </value>
-                            <border>
-                                <edge presence="hidden" thickness="0.005in">
-                                    <color value="0,0,0"/>
-                                </edge>
-                                <fill>
-                                    <color value="255, 255, 255"/>
-                                </fill>
-                            </border>
                         </field>
                         <field name="ddlSubject">
                             <value override="1"/>
@@ -3079,7 +3063,6 @@
                                 <decimal>100.00</decimal>
                             </value>
                         </field>
-                        <field name="txtAmountHidden"/>
                         <field name="ddlCounterpart">
                             <items>
                                 <text>---Subject---</text>
@@ -3102,9 +3085,6 @@
                         </field>
                         <instanceManager name="_subHiddenList"/>
                         <subform name="subHiddenList">
-                            <field name="txtSubjectPersonID"/>
-                            <field name="txtSubjectOrgID"/>
-                            <field name="txtSubjectAccID"/>
                             <field name="ddlsubjectID">
                                 <value>
                                     <text>20250818160027069</text>
@@ -3129,8 +3109,6 @@
                                 </items>
                             </field>
                         </subform>
-                        <field name="dtFrom_EXPORT"/>
-                        <field name="dtTo_EXPORT"/>
                     </subform>
                 </subform>
             </subform>
@@ -3138,25 +3116,9 @@
             <subform name="subTransactionTotal">
                 <field name="txtTotalAmount">
                     <value override="1"/>
-                    <border>
-                        <edge presence="hidden" thickness="0.005in">
-                            <color value="0,0,0"/>
-                        </edge>
-                        <fill>
-                            <color value="255, 255, 255"/>
-                        </fill>
-                    </border>
                 </field>
                 <field name="txtTotalPeriod">
                     <value override="1"/>
-                    <border>
-                        <edge presence="hidden" thickness="0.005in">
-                            <color value="0,0,0"/>
-                        </edge>
-                        <fill>
-                            <color value="255, 255, 255"/>
-                        </fill>
-                    </border>
                 </field>
                 <field name="txtDailyAverage">
                     <border>
@@ -3684,21 +3646,263 @@
             <subform name="chkgpCategoriesOfOffencsByFATF">
                 <instanceManager name="_subPartA"/>
                 <subform name="subPartA">
-                    <field name="cbTerrorism">
+                    <field access="open" name="cbTraffickingDrugs">
+                        <value override="1">
+                            <text>TRND</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbSexual">
+                        <value override="1">
+                            <text>SEXE</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbOrgCrime">
+                        <value override="1">
+                            <text>ORCR</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbTerrorism">
                         <value override="1">
                             <text>TERR</text>
                         </value>
                     </field>
-                    <field name="cbTraffickingHuman">
+                    <field access="open" name="cbTraffickingHuman">
                         <value override="1">
                             <text>TRHM</text>
                         </value>
                     </field>
+                    <field access="open" name="cbTraffickingArms">
+                        <value override="1">
+                            <text>TRAM</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbTraffickingGoods">
+                        <value override="1">
+                            <text>TRSG</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbCorruption">
+                        <value override="1">
+                            <text>CUBB</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbFraud">
+                        <value override="1">
+                            <text>FRAU</text>
+                        </value>
+                    </field>
+                    <instanceManager name="_subFraud"/>
+                    <subform name="subFraud">
+                        <field access="open" name="cbEmailScam">
+                            <value override="1">
+                                <text>EMSC</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbInvestmentScam">
+                            <value override="1">
+                                <text>IVSC</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbRomanceScam">
+                            <value override="1">
+                                <text>RMSC</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbTelephoneDeception">
+                            <value override="1">
+                                <text>TELD</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbOthers">
+                            <value>
+                                <text>0</text>
+                            </value>
+                        </field>
+                        <instanceManager name="_subOthers"/>
+                        <subform name="subOthers" presence="hidden">
+                            <field access="open" name="txtOthers"/>
+                        </subform>
+                    </subform>
+                </subform>
+                <instanceManager name="_subPartB"/>
+                <subform name="subPartB">
+                    <field access="open" name="cbSmuggling">
+                        <value override="1">
+                            <text>SMUG</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbCounterfeitingCur">
+                        <value override="1">
+                            <text>CFCR</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbCounterfeitingPro">
+                        <value override="1">
+                            <text>CFCP</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbEnv">
+                        <value override="1">
+                            <text>EVCR</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbMurder">
+                        <value override="1">
+                            <text>MGBI</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbKidnap">
+                        <value override="1">
+                            <text>KIHT</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbRobbery">
+                        <value override="1">
+                            <text>RBTF</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbTax">
+                        <value override="1">
+                            <text>TAXE</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbExtortion">
+                        <value override="1">
+                            <text>EXTO</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbForgery">
+                        <value override="1">
+                            <text>FORG</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbPiracy">
+                        <value override="1">
+                            <text>PIRA</text>
+                        </value>
+                    </field>
+                    <field access="open" name="cbInsider">
+                        <value override="1">
+                            <text>ITMM</text>
+                        </value>
+                    </field>
+                </subform>
+                <instanceManager name="_subPartC"/>
+                <subform name="subPartC">
+                    <field access="open" name="cbMoneyLaundering">
+                        <value override="1">
+                            <text>MOLA</text>
+                        </value>
+                    </field>
+                    <instanceManager name="_subMoneyLaundering"/>
+                    <subform name="subMoneyLaundering">
+                        <field access="open" name="cbSelfLaundering">
+                            <value override="1">
+                                <text>0</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbThirdPartyLaundering">
+                            <value override="1">
+                                <text>TPLA</text>
+                            </value>
+                        </field>
+                    </subform>
+                    <instanceManager name="_subOthers"/>
+                    <subform name="subOthers">
+                        <field access="open" name="cbNoCrimeRelated">
+                            <value>
+                                <text>0</text>
+                            </value>
+                        </field>
+                        <field access="open" name="cbOthers">
+                            <value>
+                                <text>0</text>
+                            </value>
+                        </field>
+                    </subform>
                 </subform>
             </subform>
             <instanceManager name="_SuspectedCrimeList"/>
             <subform name="SuspectedCrimeList">
                 <instanceManager name="_SuspectedCrimeDetail"/>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
+                <subform name="SuspectedCrimeDetail">
+                    <field name="ReasonCode"/>
+                </subform>
                 <subform name="SuspectedCrimeDetail">
                     <field name="ReasonCode"/>
                 </subform>
@@ -3718,13 +3922,6 @@
                             <text>ITBA</text>
                         </value>
                     </field>
-                </subform>
-            </subform>
-            <instanceManager name="_SuspiciousIndicatorList"/>
-            <subform name="SuspiciousIndicatorList">
-                <instanceManager name="_SuspiciousIndicatorDetail"/>
-                <subform name="SuspiciousIndicatorDetail">
-                    <field name="ReasonCode"/>
                 </subform>
             </subform>
         </subform>

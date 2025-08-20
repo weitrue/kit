@@ -13,11 +13,10 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 )
 
 func main() {
-	ReplaceXFA()
+	printXML()
 }
 
 func ReplaceXFA() {
@@ -87,36 +86,26 @@ func ReplaceXFA() {
 	for i := 0; i < len(xfaArr); i += 2 {
 		name := objToNameString(xfaArr[i])
 		if strings.EqualFold(strings.TrimSpace(name), "datasets") {
-			sObjNr, err := ctx.NewEmbeddedStreamDict(bytes.NewReader(newDatasetsXML()), time.Now())
+			targetObj := xfaArr[i+1]
+			s, _ := ctx.Dereference(targetObj)
+			data := s.(types.StreamDict)
+			xmlData = cleanXML(xmlData)
+			xmlData = bytes.TrimPrefix(xmlData, []byte("\xef\xbb\xbf"))
+			data.Content = xmlData
+			err = data.Encode()
+			if err != nil {
+				log.Fatalf("encode err: %v", err)
+				return
+			}
+
+			sObjNr, err := ctx.IndRefForNewObject(data)
 			if err != nil {
 				log.Fatal("IndRefForNewObject error")
 				return
 			}
+
 			xfaArr[i+1] = *sObjNr
 			break
-			//targetObj := xfaArr[i+1]
-			//o, _ := ctx.Dereference(targetObj)
-			//if data, ok := o.(types.StreamDict); ok {
-			//	// 清理 XML 空行并赋值
-			//	_ = data.Decode()
-			//	data.Content = cleanXML(xmlData)
-			//	data.Raw = nil
-			//	// 编码流（Length 自动更新）
-			//	err = data.Encode()
-			//	if err != nil {
-			//		log.Fatal("stream.Encode error:", err)
-			//		return
-			//	}
-			//	// 注册为新对象
-			//	sObjNr, err := ctx.IndRefForNewObject(data)
-			//	if err != nil {
-			//		log.Fatal("IndRefForNewObject error")
-			//		return
-			//	}
-			//	xfaArr[i+1] = *sObjNr
-			//	break
-			//}
-
 		}
 	}
 
@@ -192,6 +181,130 @@ func print(ctx *pdf.Context, xfaArr types.Array) {
 			}
 		}
 	}
+}
+
+func printXML() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/template/HongKong_STR_form.pdf"
+	conf := pdf.NewDefaultConfiguration()
+	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
+	conf.Cmd = pdf.VALIDATE
+
+	f, err := os.Open(in)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ctx, err := api.ReadContext(f, conf)
+	if err != nil {
+		log.Fatalf("ReadContextFile error: %v", err)
+	}
+
+	rootDict, err := ctx.XRefTable.Catalog()
+	if err != nil {
+		log.Fatalf("catalog error: %v", err)
+	}
+
+	// 从 Catalog 里拿 AcroForm 引用
+	formRef, found := rootDict.Find("AcroForm")
+	if !found {
+		log.Println("没有 AcroForm")
+		return
+	}
+
+	formDict, err := ctx.DereferenceDict(formRef)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 取 XFA
+	xfaObj, ok := formDict.Find("XFA")
+	if !ok {
+		log.Fatal("AcroForm 没有 XFA")
+	}
+
+	xfaArr, ok := derefToArray(ctx, xfaObj)
+	if !ok {
+		log.Fatal("XFA is not an array or couldn't deref")
+	}
+
+	// 4) 找到 datasets 流对象
+	for i := 0; i < len(xfaArr); i += 2 {
+		name := objToNameString(xfaArr[i])
+		if name == "datasets" {
+			o, _ := ctx.Dereference(xfaArr[i+1])
+			if data, ok := o.(types.StreamDict); ok {
+				err = data.Decode()
+				if err != nil {
+					log.Fatal(err)
+					return
+				}
+				printReasonCodes(data.Content)
+			}
+		}
+
+	}
+}
+
+func printReasonCodes(xmlData []byte) error {
+	dec := xml.NewDecoder(bytes.NewReader(xmlData))
+
+	var (
+		inSuspectedCrimeDetail      bool
+		inSuspiciousIndicatorDetail bool
+		suspectedCodes              []string
+		indicatorCodes              []string
+	)
+
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		switch se := tok.(type) {
+		case xml.StartElement:
+			switch se.Name.Local {
+			case "SuspectedCrimeDetail":
+				inSuspectedCrimeDetail = true
+			case "SuspiciousIndicatorDetail":
+				inSuspiciousIndicatorDetail = true
+			case "ReasonCode":
+				var v string
+				if err := dec.DecodeElement(&v, &se); err != nil {
+					return err
+				}
+				v = strings.TrimSpace(v)
+				if v == "" {
+					continue // 跳过 schema 里那些自闭合的空 ReasonCode
+				}
+				if inSuspectedCrimeDetail {
+					suspectedCodes = append(suspectedCodes, v)
+				} else if inSuspiciousIndicatorDetail {
+					indicatorCodes = append(indicatorCodes, v)
+				}
+			}
+
+		case xml.EndElement:
+			switch se.Name.Local {
+			case "SuspectedCrimeDetail":
+				inSuspectedCrimeDetail = false
+			case "SuspiciousIndicatorDetail":
+				inSuspiciousIndicatorDetail = false
+			}
+		}
+	}
+
+	// 打印
+	if len(suspectedCodes) > 0 {
+		fmt.Printf("SuspectedCrime ReasonCode: %v\n", suspectedCodes)
+	}
+	if len(indicatorCodes) > 0 {
+		fmt.Printf("SuspiciousIndicator ReasonCode: %v\n", indicatorCodes)
+	}
+	return nil
 }
 
 func demo1() {

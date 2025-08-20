@@ -105,7 +105,7 @@
                     <TrxID>1</TrxID>
                     <TrxDateTimeFrom>2025-08-18 00:00:00</TrxDateTimeFrom>
                     <TrxDateTimeTo>2025-08-19 00:00:00</TrxDateTimeTo>
-                    <TrxSubject/>
+                    <TrxSubject>20250818160027069</TrxSubject>
                     <SubjectID>
                         <PersonID>20250818160027069</PersonID>
                         <OrgID/>
@@ -131,12 +131,13 @@
             <SuspectedCrime>
                 <SuspectedCrimeList>
                     <SuspectedCrimeDetail>
-                        <ReasonCode>TERR</ReasonCode>
+                        <ReasonCode>FRAU</ReasonCode>
                     </SuspectedCrimeDetail>
                     <SuspectedCrimeDetail>
-                        <ReasonCode>TRHM</ReasonCode>
+                        <ReasonCode>OTHS</ReasonCode>
                     </SuspectedCrimeDetail>
                 </SuspectedCrimeList>
+                <AddInfo>Online Gambling</AddInfo>
             </SuspectedCrime>
             <SuspiciousIndicator>
                 <SuspiciousIndicatorList>
