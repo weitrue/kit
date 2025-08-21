@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	printXML()
+	printSingaporeXML()
 }
 
 func ReplaceXFA() {
@@ -89,8 +89,6 @@ func ReplaceXFA() {
 			targetObj := xfaArr[i+1]
 			s, _ := ctx.Dereference(targetObj)
 			data := s.(types.StreamDict)
-			xmlData = cleanXML(xmlData)
-			xmlData = bytes.TrimPrefix(xmlData, []byte("\xef\xbb\xbf"))
 			data.Content = xmlData
 			err = data.Encode()
 			if err != nil {
@@ -114,18 +112,6 @@ func ReplaceXFA() {
 	if err != nil {
 		return
 	}
-}
-
-func cleanXML(xmlData []byte) []byte {
-	// 去掉空行
-	lines := strings.Split(string(xmlData), "\n")
-	var buf bytes.Buffer
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" { // 非空行才写入
-			buf.WriteString(line)
-		}
-	}
-	return buf.Bytes()
 }
 
 func print(ctx *pdf.Context, xfaArr types.Array) {
@@ -183,7 +169,7 @@ func print(ctx *pdf.Context, xfaArr types.Array) {
 	}
 }
 
-func printXML() {
+func printHongKongXML() {
 	in := "/Users/wpeng/Projects/golang/src/kit/pdf/template/HongKong_STR_form.pdf"
 	conf := pdf.NewDefaultConfiguration()
 	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
@@ -194,6 +180,70 @@ func printXML() {
 		return
 	}
 	defer f.Close()
+
+	ctx, err := api.ReadContext(f, conf)
+	if err != nil {
+		log.Fatalf("ReadContextFile error: %v", err)
+	}
+
+	rootDict, err := ctx.XRefTable.Catalog()
+	if err != nil {
+		log.Fatalf("catalog error: %v", err)
+	}
+
+	// 从 Catalog 里拿 AcroForm 引用
+	formRef, found := rootDict.Find("AcroForm")
+	if !found {
+		log.Println("没有 AcroForm")
+		return
+	}
+
+	formDict, err := ctx.DereferenceDict(formRef)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 取 XFA
+	xfaObj, ok := formDict.Find("XFA")
+	if !ok {
+		log.Fatal("AcroForm 没有 XFA")
+	}
+
+	xfaArr, ok := derefToArray(ctx, xfaObj)
+	if !ok {
+		log.Fatal("XFA is not an array or couldn't deref")
+	}
+
+	// 4) 找到 datasets 流对象
+	for i := 0; i < len(xfaArr); i += 2 {
+		name := objToNameString(xfaArr[i])
+		if name == "datasets" {
+			o, _ := ctx.Dereference(xfaArr[i+1])
+			if data, ok := o.(types.StreamDict); ok {
+				err = data.Decode()
+				if err != nil {
+					log.Fatal(err)
+					return
+				}
+				printReasonCodes(data.Content)
+			}
+		}
+
+	}
+}
+
+func printSingaporeXML() {
+	in := "/Users/wpeng/Projects/golang/src/kit/pdf/Singapore_STR_O.pdf"
+	conf := pdf.NewDefaultConfiguration()
+	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
+	conf.Cmd = pdf.VALIDATE
+
+	f, err := os.Open(in)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
 	ctx, err := api.ReadContext(f, conf)
 	if err != nil {
 		log.Fatalf("ReadContextFile error: %v", err)
