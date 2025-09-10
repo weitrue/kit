@@ -1,8 +1,6 @@
 package hash
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -18,9 +16,9 @@ func TestGetHash(t *testing.T) {
 		{
 			name: "test",
 			args: args{
-				str: "hello world",
+				str: "hrbxywp@163.com",
 			},
-			want: "5eb63bbbe01eeed093cb22bb8f5acdc3",
+			want: "84867a07dda15402a7e886a0eb4026b0",
 		},
 	}
 	for _, tt := range tests {
@@ -31,5 +29,4 @@ func TestGetHash(t *testing.T) {
 		})
 	}
 
-	fmt.Println(strings.ToLower("0xA2aa501b19aff244D90cc15a4Cf739D2725B5729"))
 }

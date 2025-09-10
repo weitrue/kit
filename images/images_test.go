@@ -90,5 +90,44 @@ https://t.me/easycoinai_bot?start=r-btcapostle-EbMT8cnhPXrTNkxnfvNC5dqCqFcGVW2cM
 }
 
 func TestDecodeImage(t *testing.T) {
+	// 示例 base64 图片数据（请替换为你自己的）
+	base64Image := "data:image/png;base64,..."
 
+	// 移除前缀（如果有）
+	if strings.Contains(base64Image, ",") {
+		base64Image = strings.Split(base64Image, ",")[1]
+	}
+
+	// 解码 base64
+	imgData, err := base64.StdEncoding.DecodeString(base64Image)
+	if err != nil {
+		panic(err)
+	}
+
+	// 解码为 image.Image 对象（可选）
+	img, format, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("图片格式：", format)
+	_ = img // 你可以用它做进一步处理，比如灰度化、缩放等
+
+	// OCR 识别
+	client := gosseract.NewClient()
+	defer client.Close()
+
+	err = client.SetImageFromBytes(imgData)
+	if err != nil {
+		panic(err)
+	}
+
+	// 可选：限制只识别数字
+	client.SetWhitelist("0123456789")
+
+	text, err := client.Text()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("识别结果：", strings.TrimSpace(text))
 }
