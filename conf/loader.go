@@ -1,9 +1,9 @@
 package conf
 
 import (
-	"github.com/weitrue/kit/utils/encoding"
-	"github.com/weitrue/kit/utils/jsonx"
-	"github.com/weitrue/kit/utils/mapping"
+	"github.com/weitrue/kit/conf/utils/encoding"
+	"github.com/weitrue/kit/conf/utils/jsonx"
+	"github.com/weitrue/kit/conf/utils/mapping"
 	"reflect"
 )
 

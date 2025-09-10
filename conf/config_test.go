@@ -55,7 +55,7 @@ func TestMustLoad(t *testing.T) {
 				C string `json:"c"`
 				D string `json:"d"`
 			}
-			MustLoad(tmpfile, &val)
+			Load(tmpfile, &val)
 			assert.Equal(t, "foo", val.A)
 			assert.Equal(t, 1, val.B)
 			assert.Equal(t, "${FOO}", val.C)

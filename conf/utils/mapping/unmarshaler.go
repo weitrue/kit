@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weitrue/kit/utils/jsonx"
+	"github.com/weitrue/kit/conf/utils/jsonx"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/weitrue/kit/utils/proc"
+	"github.com/weitrue/kit/conf/utils/proc"
 )
 
 const (

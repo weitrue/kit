@@ -2,7 +2,6 @@ package conf
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"strings"
@@ -18,13 +17,6 @@ var loaders = map[string]func([]byte, any) error{
 	".toml": LoadFromTomlBytes,
 	".yaml": LoadFromYamlBytes,
 	".yml":  LoadFromYamlBytes,
-}
-
-// MustLoad loads config into v from path, exits on error.
-func MustLoad(path string, v any, opts ...Option) {
-	if err := Load(path, v, opts...); err != nil {
-		log.Fatalf("error: config file %s, %s", path, err.Error())
-	}
 }
 
 // Load loads config into v from file, .json, .yaml and .yml are acceptable.
