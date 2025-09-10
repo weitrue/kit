@@ -1400,7 +1400,7 @@
                 <Securities>N</Securities>
                 <StoredValueFacilities>N</StoredValueFacilities>
                 <ATMs>N</ATMs>
-                <Cryptocurrency>N</Cryptocurrency>
+                <Cryptocurrency>Y</Cryptocurrency>
                 <PreciousStonesandMetals>N</PreciousStonesandMetals>
                 <PreciousProducts>N</PreciousProducts>
                 <PreciousTokens>N</PreciousTokens>
@@ -1445,16 +1445,16 @@
             <ValidationStatus>Validation Required</ValidationStatus>
             <ValidatedTime>21/08/2025 6:48:16 PM</ValidatedTime>
             <Transaction>
-                <IsActualTransaction/>
+                <IsActualTransaction>Y</IsActualTransaction>
                 <AccountNo/>
-                <TransactionType/>
+                <TransactionType>GENTXN007</TransactionType>
                 <InOutTrans/>
                 <DigitalPaymentToken/>
                 <VirtualAssetAmount/>
                 <DigitalPaymentTokenOthers/>
                 <DigitalPaymentTokenNFTs/>
                 <PropertyType/>
-                <AmountOriginalCurrency/>
+                <AmountOriginalCurrency>SGD</AmountOriginalCurrency>
                 <AmountOriginal/>
                 <AmountForeignCurrency/>
                 <AmountForeign/>
@@ -1466,13 +1466,13 @@
                 <TransactionHash/>
                 <ReceiveWalletAdd/>
                 <SenderWalletAdd/>
-                <IsReceiveWalletAddUnknown/>
-                <IsTransactionHashUnknown/>
-                <IsSenderWalletAddNA/>
+                <IsReceiveWalletAddUnknown>N</IsReceiveWalletAddUnknown>
+                <IsTransactionHashUnknown>N</IsTransactionHashUnknown>
+                <IsSenderWalletAddNA>N</IsSenderWalletAddNA>
                 <SourceCountry/>
                 <DestinationCountry/>
                 <ProviderName/>
-                <IsProviderNameNA/>
+                <IsProviderNameNA>Y</IsProviderNameNA>
                 <CounterpartyName/>
                 <CounterpartyID/>
                 <CounterpartyDOB_Day/>
@@ -1753,7 +1753,7 @@
             <ContactNo/>
             <ContactOfficerDate/>
             <IsAdmissionSubmitted/>
-            <ValidationStatus/>
+            <ValidationStatus>Validation Required</ValidationStatus>
             <ValidatedTime/>
         </SuspiciousReason>
         <FormStatus>

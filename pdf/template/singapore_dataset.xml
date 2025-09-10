@@ -1443,15 +1443,15 @@
                 </Address>
             </Branch>
             <ValidationStatus>Validation Required</ValidationStatus>
-            <ValidatedTime>21/08/2025 6:23:22 PM</ValidatedTime>
+            <ValidatedTime>26/08/2025 3:32:29 PM</ValidatedTime>
             <Transaction>
                 <IsActualTransaction>Y</IsActualTransaction>
                 <AccountNo/>
                 <TransactionType>GENTXN007</TransactionType>
                 <InOutTrans>GENTXN001</InOutTrans>
-                <DigitalPaymentToken>USDT</DigitalPaymentToken>
+                <DigitalPaymentToken>OTH</DigitalPaymentToken>
                 <VirtualAssetAmount>10000.00</VirtualAssetAmount>
-                <DigitalPaymentTokenOthers/>
+                <DigitalPaymentTokenOthers>POL</DigitalPaymentTokenOthers>
                 <DigitalPaymentTokenNFTs/>
                 <PropertyType/>
                 <AmountOriginalCurrency>SGD</AmountOriginalCurrency>
@@ -1753,13 +1753,13 @@
             <ContactNo/>
             <ContactOfficerDate/>
             <IsAdmissionSubmitted/>
-            <ValidationStatus>Validation Required</ValidationStatus>
-            <ValidatedTime/>
+            <ValidationStatus>Failed</ValidationStatus>
+            <ValidatedTime>22/08/2025 9:28:45 AM</ValidatedTime>
         </SuspiciousReason>
         <FormStatus>
             <ValidationStatus>Disabled</ValidationStatus>
             <IsWatermark>N</IsWatermark>
-            <ReaderRecord>|Exchange-Pro25.00120476|Exchange-Pro25.00120577|Exchange-Pro25.00120577|</ReaderRecord>
+            <ReaderRecord>|Exchange-Pro25.00120476|Exchange-Pro25.00120577|Exchange-Pro25.00120577|Exchange-Pro25.0012063|Reader25.0012063|</ReaderRecord>
         </FormStatus>
         <Header>
             <STRNo/>
