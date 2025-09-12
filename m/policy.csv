@@ -1,0 +1,36 @@
+p, backend_admin, *, *
+p, backend_user, *, read
+
+# Enterprise 注册或后台创建的订阅用户，功能近似后台（这里赋与最多权限）
+p, enterprise, Screens, use
+p, enterprise, Screens, create
+p, enterprise, Screens, delete
+p, enterprise, Engine, *
+p, enterprise, Reports, *
+p, enterprise, Notification, *
+
+# Pro
+p, pro, Screens, use
+p, pro, Screens, create
+p, pro, Screens, delete
+p, pro, Engine, *
+p, pro, Reports, *
+p, pro, Notification, *
+
+# Growth
+p, growth, Screens, use
+p, growth, Screens, create
+p, growth, Screens, delete
+p, growth, Engine, view
+p, growth, Engine, list
+p, growth, Reports, *
+
+# Starter
+p, starter, Screens, use
+p, starter, Engine, view
+p, starter, Engine, list
+
+# Registered non-admin users : non-modify limitation
+# We'll model admin vs non-admin via role chain:
+# e.g., user alice with enterprise_admin -> belongs to enterprise + backend_admin
+# for non-admin: only belongs to enterprise (no '*' actions)

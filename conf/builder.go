@@ -2,7 +2,7 @@ package conf
 
 import (
 	"fmt"
-	"github.com/weitrue/kit/utils/mapping"
+	"github.com/weitrue/kit/conf/utils/mapping"
 	"reflect"
 	"strings"
 )

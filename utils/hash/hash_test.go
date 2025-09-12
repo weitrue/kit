@@ -1,6 +1,8 @@
 package hash
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestGetHash(t *testing.T) {
 	type args struct {
@@ -14,9 +16,9 @@ func TestGetHash(t *testing.T) {
 		{
 			name: "test",
 			args: args{
-				str: "hello world",
+				str: "hrbxywp@163.com",
 			},
-			want: "5eb63bbbe01eeed093cb22bb8f5acdc3",
+			want: "84867a07dda15402a7e886a0eb4026b0",
 		},
 	}
 	for _, tt := range tests {
@@ -26,4 +28,5 @@ func TestGetHash(t *testing.T) {
 			}
 		})
 	}
+
 }
