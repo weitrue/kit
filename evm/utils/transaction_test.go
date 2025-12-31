@@ -249,7 +249,7 @@ func Test_decodeTransactionByPreSign(t *testing.T) {
 	}
 }
 
-func TestName1(t *testing.T) {
+func TestDecodeAndEncode(t *testing.T) {
 	str := "b530f66688e58ad957574aa09e98cf209b40b782562ee3a9aaaa685f34f5be632618f4c64805526a3092d41f25597ccfe4dd82166644607b"
 	decode, err := hex.DecodeString(str)
 	if err != nil {
