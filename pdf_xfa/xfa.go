@@ -1,4 +1,4 @@
-package main
+package pdf_xfa
 
 import (
 	"bytes"
@@ -8,169 +8,13 @@ import (
 	pdf "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 )
 
-func main() {
-	printSingaporeXML()
-	printHongKongXML()
-}
-
-func ReplaceXFA() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/HongKong_STR_form_O.pdf"
-	outFile := "STR_Form_f.pdf"
-
-	// 读取新的 XML 数据
-	xmlData, err := ioutil.ReadFile("/Users/wpeng/Projects/golang/src/kit/pdf/template/dataset.xml")
-	if err != nil {
-		log.Fatal("Error reading XML data:", err)
-		return
-	}
-
-	lines := strings.Split(string(xmlData), "\n")
-	var cleanLines []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			cleanLines = append(cleanLines, trimmed)
-		}
-	}
-	xmlData = []byte(strings.Join(cleanLines, "\n"))
-
-	conf := pdf.NewDefaultConfiguration()
-	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
-	conf.Cmd = pdf.VALIDATE
-
-	f, err := os.Open(in)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	ctx, err := api.ReadContext(f, conf)
-	if err != nil {
-		log.Fatalf("ReadContextFile error: %v", err)
-	}
-
-	rootDict, err := ctx.XRefTable.Catalog()
-	if err != nil {
-		log.Fatalf("catalog error: %v", err)
-	}
-
-	// 从 Catalog 里拿 AcroForm 引用
-	formRef, found := rootDict.Find("AcroForm")
-	if !found {
-		log.Println("没有 AcroForm")
-		return
-	}
-
-	formDict, err := ctx.DereferenceDict(formRef)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 取 XFA
-	xfaObj, ok := formDict.Find("XFA")
-	if !ok {
-		log.Fatal("AcroForm 没有 XFA")
-	}
-
-	xfaArr, err := ctx.DereferenceArray(xfaObj)
-	if !ok {
-		log.Fatal("XFA is not an array or couldn't deref")
-	}
-
-	// 4) 找到 datasets 流对象
-	for i := 0; i < len(xfaArr); i += 2 {
-		name := objToNameString(xfaArr[i])
-		if strings.EqualFold(strings.TrimSpace(name), "datasets") {
-			targetObj := xfaArr[i+1]
-			s, _ := ctx.Dereference(targetObj)
-			data := s.(types.StreamDict)
-			data.Content = xmlData
-			err = data.Encode()
-			if err != nil {
-				log.Fatalf("encode err: %v", err)
-				return
-			}
-
-			sObjNr, err := ctx.IndRefForNewObject(data)
-			if err != nil {
-				log.Fatal("IndRefForNewObject error")
-				return
-			}
-
-			xfaArr[i+1] = *sObjNr
-			break
-		}
-	}
-
-	// 写回 PDF
-	err = api.WriteContextFile(ctx, outFile)
-	if err != nil {
-		return
-	}
-}
-
-func print(ctx *pdf.Context, xfaArr types.Array) {
-	for i := 0; i+1 < len(xfaArr); i += 2 {
-		// name entry
-		name := objToNameString(xfaArr[i])
-		fmt.Printf("Entry %d: name=%s\n", i/2, name)
-
-		// value entry
-		val := xfaArr[i+1]
-		fmt.Printf("  value type: %T\n", val)
-
-		// if indirect ref, print obj number and stream info
-		if indRef, ok := val.(types.IndirectRef); ok {
-			objNr := indRef.ObjectNumber.Value()
-			gen := indRef.GenerationNumber.Value()
-			fmt.Printf("  -> IndirectRef %d %d R\n", objNr, gen)
-			obj, err := ctx.Dereference(indRef)
-			if err != nil {
-				fmt.Printf("     deref error: %v\n", err)
-				continue
-			}
-			switch s := obj.(type) {
-			case types.StreamDict:
-				fmt.Printf("     stream found: Length=%v, keys=", s.Dict["Length"])
-				for k := range s.Dict {
-					fmt.Printf("%s ", k)
-				}
-				fmt.Println()
-				if f, ok := s.Dict.Find("Filter"); ok {
-					fmt.Printf("     Filter: %T -> %v\n", f, f)
-				}
-			default:
-				fmt.Printf("     dereferenced to type: %T\n", obj)
-			}
-		} else {
-			// direct object - maybe a stream inline (rare)
-			obj, err := ctx.Dereference(val)
-			if err == nil {
-				switch s := obj.(type) {
-				case types.StreamDict:
-					fmt.Printf("  -> Inline stream: Length=%v, keys=", s.Dict["Length"])
-					for k := range s.Dict {
-						fmt.Printf("%s ", k)
-					}
-					fmt.Println()
-					if f, ok := s.Dict.Find("Filter"); ok {
-						fmt.Printf("     Filter: %T -> %v\n", f, f)
-					}
-				default:
-					fmt.Printf("  -> Inline type: %T\n", obj)
-				}
-			}
-		}
-	}
-}
-
 func printHongKongXML() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/template/HongKong_STR_form.pdf"
+	in := "~/Projects/golang/src/kit/pdf_xfa/template/HongKong_STR_form.pdf"
 	conf := pdf.NewDefaultConfiguration()
 	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
 	conf.Cmd = pdf.VALIDATE
@@ -233,7 +77,7 @@ func printHongKongXML() {
 }
 
 func printSingaporeXML() {
-	in := "/Users/wpeng/Projects/golang/src/kit/pdf/template/Singapore_STR_form.pdf"
+	in := "~/Projects/golang/src/kit/pdf_xfa/template/Singapore_STR_form.pdf"
 	conf := pdf.NewDefaultConfiguration()
 	conf.ValidationMode = pdf.ValidationRelaxed // 遇到不规范PDF不直接报错
 	conf.Cmd = pdf.VALIDATE
@@ -288,7 +132,7 @@ func printSingaporeXML() {
 					log.Fatal(err)
 					return
 				}
-				printReasonCodes(data.Content)
+				fmt.Println(string(data.Content))
 			}
 		}
 
@@ -297,7 +141,6 @@ func printSingaporeXML() {
 
 func printReasonCodes(xmlData []byte) error {
 	dec := xml.NewDecoder(bytes.NewReader(xmlData))
-
 	var (
 		inSuspectedCrimeDetail      bool
 		inSuspiciousIndicatorDetail bool
