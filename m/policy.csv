@@ -1,36 +1,67 @@
-p, backend_admin, *, *
-p, backend_user, *, read
-
-# Enterprise 注册或后台创建的订阅用户，功能近似后台（这里赋与最多权限）
-p, enterprise, Screens, use
-p, enterprise, Screens, create
-p, enterprise, Screens, delete
-p, enterprise, Engine, *
-p, enterprise, Reports, *
-p, enterprise, Notification, *
-
-# Pro
-p, pro, Screens, use
-p, pro, Screens, create
-p, pro, Screens, delete
-p, pro, Engine, *
-p, pro, Reports, *
-p, pro, Notification, *
-
-# Growth
-p, growth, Screens, use
-p, growth, Screens, create
-p, growth, Screens, delete
-p, growth, Engine, view
-p, growth, Engine, list
-p, growth, Reports, *
+p, trial, , , allow
+p, trial, /api/v2/kyt/alert/{id}, POST, allow
+p, trial, /api/v2/kyt/alert/{id}, GET, allow
+p, trial, /api/v2/kyt/alert/{id}/{id}, POST, allow
+p, trial, /api/v2/kyt/audit-logs, POST, allow
+p, trial, /api/v2/kyt/audit-logs/comment, POST, allow
 
 # Starter
-p, starter, Screens, use
-p, starter, Engine, view
-p, starter, Engine, list
+g, starter, trial
+p, starter, /api/v2/kyt/statistics/{id}, GET, allow
 
-# Registered non-admin users : non-modify limitation
-# We'll model admin vs non-admin via role chain:
-# e.g., user alice with enterprise_admin -> belongs to enterprise + backend_admin
-# for non-admin: only belongs to enterprise (no '*' actions)
+p, starter, /api/v2/kyt/address/{id}, POST, allow
+p, starter, /api/v2/kyt/address/{id}, GET, allow
+p, starter, /api/v2/kyt/address/{id}, DELETE, allow
+p, starter, /api/v2/kyt/address/{id}/usd-flow, GET, allow
+p, starter, /api/v2/kyt/address/transfers/{id}, GET, allow
+p, starter, /api/v2/kyt/address/top-counterparty/{id}, GET, allow
+p, starter, /api/v2/kyt/addresses, DELETE, allow
+
+p, starter, /api/v2/kyt/transactions, POST, allow
+p, starter, /api/v2/kyt/transactions, GET, allow
+p, starter, /api/v2/kyt/transactions, DELETE, allow
+p, starter, /api/v2/kyt/transactions/{id}, POST, allow
+p, starter, /api/v2/kyt/transactions/attributes, GET, allow
+p, starter, /api/v2/kyt/transactions/info/{id}, GET, allow
+p, starter, /api/v2/kyt/transactions/label/{id}, PUT, allow
+p, starter, /api/v2/kyt/transactions/customer/{id}, PUT, allow
+p, starter, /api/v2/kyt/transactions/fundflow/{id}, GET, allow
+
+p, starter, /api/v2/kyt/customers, POST, allow
+p, starter, /api/v2/kyt/customer, POST, allow
+p, starter, /api/v2/kyt/customer/{id}, POST, allow
+p, starter, /api/v2/kyt/customer/{id}, GET, allow
+p, starter, /api/v2/kyt/customer/{id}, DELETE, allow
+
+p, starter, /api/v2/kyt/engine/list, POST, allow
+p, starter, /api/v2/kyt/engine/{id}, GET, allow
+p, starter, /api/v2/kyt/engine/update-name, POST, allow
+p, starter, /api/v2/kyt/engine/update-description, POST, allow
+p, starter, /api/v2/kyt/engine/update-status, POST, allow
+p, starter, /api/v2/kyt/engine/update-risk-level, POST, allow
+p, starter, /api/v2/kyt/engine/update-condition, POST, allow
+p, starter, /api/v2/kyt/engine/batch-bind-notification, POST, allow
+p, starter, /api/v2/kyt/engine/unbind-notification, POST, allow
+
+p, starter, /api/v2/kyt/system/config, GET, allow
+p, starter, /api/v2/kyt/system/compliance-upgrade, POST, allow
+p, starter, /api/v2/kyt/system/compliance-upgrade-reminder, GET, allow
+p, starter, /api/v2/kyt/system/compliance-upgrade-reminder/close, POST, allow
+p, starter, /api/v2/kyt/system/blacklist, GET, allow
+p, starter, /api/v2/kyt/system/blacklist-addresses, POST, allow
+p, starter, /api/v2/kyt/system/blacklist-addresses, DELETE, allow
+p, starter, /api/v2/kyt/system/whitelist, POST, allow
+p, starter, /api/v2/kyt/system/whitelist-addresses, POST, allow
+p, starter, /api/v2/kyt/system/whitelist-addresses, DELETE, allow
+
+g, growth, starter
+p, growth, /api/v2/kyt/export/report/*, GET, allow
+
+g, pro, growth
+p, pro, /api/v2/kyt/engine/add, POST, allow
+p, pro, /api/v2/kyt/engine/{id}, DELETE, allow
+p, pro, /api/v2/kyt/system/update-screen-setting, POST, allow
+
+# Enterprise
+p, admin, *, *, allow
+p, viewer, *, *, allow
